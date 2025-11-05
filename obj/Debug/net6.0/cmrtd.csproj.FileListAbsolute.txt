@@ -143,3 +143,5 @@ C:\Users\Farhan\Desktop\SJI\Dev\cmrtd\cmrtd\obj\Debug\net6.0\staticwebassets.upT
 C:\Users\Farhan\Desktop\SJI\Dev\cmrtd\cmrtd\bin\Debug\net6.0\deskoparsenet.dll
 C:\Users\Farhan\Desktop\SJI\Dev\cmrtd\cmrtd\bin\Debug\net6.0\pagescannet.dll
 C:\Users\Farhan\Desktop\SJI\Dev\cmrtd\cmrtd\bin\Debug\net6.0\device_info.json
+C:\Users\Farhan\Desktop\SJI\Dev\cmrtd\cmrtd\bin\Debug\net6.0\appsettings.example.json
+C:\Users\Farhan\Desktop\SJI\Dev\cmrtd\cmrtd\obj\Debug\net6.0\cmrtd.sourcelink.json

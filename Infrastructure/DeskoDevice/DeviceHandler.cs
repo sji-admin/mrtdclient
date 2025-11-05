@@ -576,13 +576,13 @@ namespace cmrtd.Infrastructure.DeskoDevice
                             if (!string.IsNullOrEmpty(_epassport.FaceBase64))
                             {
                                 faceBase64 = _epassport.FaceBase64;
-                                _lastScanResult.Data.DocType = "CHIP";
+                                _lastScanResult.Data.DocType = "chip";
                                 _deviceManager.Log($"[BASE64] Use FaceBase64 From chip ({faceBase64.Length} chars)");
                             }
                             else if (!string.IsNullOrEmpty(_fallbackPortraitBase64))
                             {
                                 faceBase64 = _fallbackPortraitBase64;
-                                _lastScanResult.Data.DocType = "DOKUMEN";
+                                _lastScanResult.Data.DocType = "document";
                                 _deviceManager.Log($"[BASE64] Use fallback portrait ({faceBase64.Length} chars)");
                             }
                             else

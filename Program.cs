@@ -144,24 +144,40 @@ namespace cmrtd
             {
                 var query = context.Request.Query;
 
-                if (!query.TryGetValue("full", out var fullStr))
+                // === VALIDASI PARAMETER FULL (DENGAN DEFAULT) ===
+                bool full = false;
+
+                if (query.TryGetValue("full", out var fullStr))
                 {
-                    return Results.BadRequest(new
+                    if (!bool.TryParse(fullStr, out full))
                     {
-                        status = "error",
-                        message = "Parameter 'full' is required. Please provide ?full=true or ?full=false"
-                    });
+                        // Jika dikirim tapi tidak valid (misalnya ?full=abc)
+                        return Results.BadRequest(new
+                        {
+                            status = "error",
+                            message = "Parameter 'full' must be true or false"
+                        });
+                    }
                 }
 
-                if (!bool.TryParse(fullStr, out var full))
-                {
-                    return Results.BadRequest(new
-                    {
-                        status = "error",
-                        message = "Parameter 'full' must be true or false"
-                    });
-                }
-                
+                //if (!query.TryGetValue("full", out var fullStr))
+                //{
+                //    return Results.BadRequest(new
+                //    {
+                //        status = "error",
+                //        message = "Parameter 'full' is required. Please provide ?full=true or ?full=false"
+                //    });
+                //}
+
+                //if (!bool.TryParse(fullStr, out var full))
+                //{
+                //    return Results.BadRequest(new
+                //    {
+                //        status = "error",
+                //        message = "Parameter 'full' must be true or false"
+                //    });
+                //}
+
                 query.TryGetValue("device_id", out var serialParam);
                 string serial = serialParam.ToString()?.Trim() ?? "";
 

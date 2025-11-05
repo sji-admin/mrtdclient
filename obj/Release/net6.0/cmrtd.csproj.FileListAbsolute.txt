@@ -73,3 +73,5 @@ C:\Users\Farhan\Desktop\SJI\Dev\cmrtd\cmrtd\obj\Release\net6.0\ref\cmrtd.dll
 C:\Users\Farhan\Desktop\SJI\Dev\cmrtd\cmrtd\bin\Release\net6.0\device_info.json
 C:\Users\Farhan\Desktop\SJI\Dev\cmrtd\cmrtd\bin\Release\net6.0\deskoparsenet.dll
 C:\Users\Farhan\Desktop\SJI\Dev\cmrtd\cmrtd\bin\Release\net6.0\pagescannet.dll
+C:\Users\Farhan\Desktop\SJI\Dev\cmrtd\cmrtd\bin\Release\net6.0\appsettings.example.json
+C:\Users\Farhan\Desktop\SJI\Dev\cmrtd\cmrtd\obj\Release\net6.0\cmrtd.sourcelink.json

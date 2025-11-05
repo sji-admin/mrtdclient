@@ -80,7 +80,7 @@ namespace cmrtd.Core.Service
                     {
                         mrz = mrz,
                         bcbp = "",
-                        docType = "DOCUMENT",
+                        docType = "document",
                         uuid = Guid.NewGuid().ToString(),
                         valid = true,
                         rgbImage = new RgbImage
@@ -119,5 +119,7 @@ namespace cmrtd.Core.Service
                 Console.WriteLine($">>> [CALLBACK] Error: {ex.Message}");
             }
         }
+    
+    
     }
 }
