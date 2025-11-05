@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("cmrtd")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+3fca8ac590b7cae9d1537a735f72a50aba888552")]
 [assembly: System.Reflection.AssemblyProductAttribute("cmrtd")]
 [assembly: System.Reflection.AssemblyTitleAttribute("cmrtd")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
