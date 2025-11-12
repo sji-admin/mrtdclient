@@ -1,4 +1,5 @@
-﻿using cmrtd.Core.Model;
+﻿using cmrtd.Core;
+using cmrtd.Core.Model;
 using cmrtd.Core.Service;
 using Desko.EPass;
 using Desko.FullPage;
@@ -18,6 +19,10 @@ namespace cmrtd.Infrastructure.DeskoDevice
         private string _ocrString;
         private string _imageFormat;
         private string _faceLocation;
+        private string _erpotSatu;
+        private string _erpotDua;
+        private string _erpotTiga;
+        private readonly Helper _helper = new Helper();
         private readonly DeviceSettings _deviceSettings;
         private readonly bool _connectOnPlug = true;
         private readonly CallbackSettings _callbackSettings;
@@ -432,7 +437,6 @@ namespace cmrtd.Infrastructure.DeskoDevice
                 else
                     Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [UV DULL] Bright detected");
 
-                //onScanOcr();
 
                 _lastScanResult.Data.RgbImage.IsB900Ink = isB900InkDetected;
                 _lastScanResult.Data.IrImage.IsB900Ink = isB900InkDetected;
@@ -445,7 +449,6 @@ namespace cmrtd.Infrastructure.DeskoDevice
 
                 Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [SCAN] Pixel Density: {dens.X} x {dens.Y} ppm");
 
-                //onScanOcr();
 
                 try
                 {
@@ -500,12 +503,14 @@ namespace cmrtd.Infrastructure.DeskoDevice
                         Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [ERROR] Gagal mengambil gambar wajah.");
                     }
 
+                    _erpotSatu = null;
+
                 }
                 catch (PsaException ex)
                 {
                     Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [IR] Gagal mengambil gambar Infrared: " + ex.Message);
+                    _erpotSatu = "IR : " + ex.Message;
                 }
-
 
                 try
                 {
@@ -563,11 +568,13 @@ namespace cmrtd.Infrastructure.DeskoDevice
                         Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [ERROR] Gagal mengambil gambar wajah.");
                     }
 
+                    _erpotDua = null;
 
                 }
                 catch (PsaException ex)
                 {
                     Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [VIS] Gagal mengambil gambar Visible: " + ex.Message);
+                    _erpotDua = "Visible: " + ex.Message;
                 }
 
                 try
@@ -624,24 +631,34 @@ namespace cmrtd.Infrastructure.DeskoDevice
                 catch (PsaException ex)
                 {
                     Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [UV] Gagal mengambil gambar UV: " + ex.Message);
+                    _erpotTiga = "UV: " + ex.Message;
                 }
 
-                Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [BCR] Try To Read Barcode...");
-                if (Api.GetPropertyInt(PropertyKey.DeviceSupportBarcodeOnPc) == 0)
+                //Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [BCR] Try To Read Barcode...");
+                //if (Api.GetPropertyInt(PropertyKey.DeviceSupportBarcodeOnPc) == 0)
+                //{
+                //    Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [BCR] Barcode Not Found.");
+                //}
+                //else
+                //{
+                //    while (true)
+                //    {
+                //        byte[] bcr = Api.GetBarcodePc();
+                //        if (bcr == null)
+                //            break;
+
+                //        string text = DeviceToolsPscan.MaskNonAscii(bcr);
+                //        Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [BCR DATA] " + text);
+                //    }
+                //}
+
+                if (!string.IsNullOrEmpty(_erpotSatu) && !string.IsNullOrEmpty(_erpotDua))
                 {
-                    Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [BCR] Barcode Not Found.");
+                    _lastScanResult.Err_msg = $"{_erpotSatu} {_erpotDua} {_erpotTiga}".Trim();
                 }
                 else
                 {
-                    while (true)
-                    {
-                        byte[] bcr = Api.GetBarcodePc();
-                        if (bcr == null)
-                            break;
-
-                        string text = DeviceToolsPscan.MaskNonAscii(bcr);
-                        Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [BCR DATA] " + text);
-                    }
+                    _lastScanResult.Err_msg = null;
                 }
 
                 return _scanCompletionSource.Task;
@@ -721,7 +738,7 @@ namespace cmrtd.Infrastructure.DeskoDevice
                     else
                     {
                         Console.WriteLine("[BASE64] Tidak ada image yang bisa dikirim");
-                        return;
+                        //return;
                     }
 
                     _lastScanResult.Data.DocType = docType;
@@ -745,14 +762,15 @@ namespace cmrtd.Infrastructure.DeskoDevice
 
                     if (deviceSettingsLocal.Callback.Enable)
                     {
-                        sendTasks.Add(_apiService.SendCallbackAsync(
+                        sendTasks.Add(_apiService.SendCallbackAsync(                            
                             _ocrString,
                             _lastScanResult.Data.RgbImage.ImgBase64,
                             _lastScanResult.Data.RgbImage.Location,
                             faceBase64,
                             _deviceSettings.Callback.Url,
                             format,
-                            _lastScanResult.Data.RgbImage.FaceLocation
+                            _lastScanResult.Data.RgbImage.FaceLocation,
+                            _lastScanResult.Err_msg
                         ));
                     }
 
@@ -764,9 +782,17 @@ namespace cmrtd.Infrastructure.DeskoDevice
 
                     Console.WriteLine($"[API] Semua task selesai dalam {sw.Elapsed.TotalSeconds:F2} detik");
 
-                    faceBase64 = null;
-                    _epassport.FaceBase64 = null;
-                    _fallbackPortraitBase64 = null;
+                    _helper.Cleaner
+                    (
+                        _lastScanResult.Data.MRZ,
+                        _ocrString,
+                        _lastScanResult.Data.RgbImage.ImgBase64,
+                        _lastScanResult.Data.RgbImage.Location,
+                        faceBase64,
+                        _deviceSettings.Callback.Url,
+                        format,
+                        _lastScanResult.Data.RgbImage.FaceLocation                        
+                        );
                 }
                 catch (Exception ex)
                 {

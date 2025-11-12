@@ -23,6 +23,7 @@ namespace cmrtd.Infrastructure.DeskoDevice
         private readonly CallbackSettings _callbackSettings;
         private readonly ApiService _apiService;
         private readonly Epassport _epassport = new Epassport();
+        private readonly Helper _helper = new Helper();
         public Pasport.ScanApiResponse LastScanResult => _lastScanResult;
         private TaskCompletionSource<Pasport.ScanApiResponse> _scanCompletionSource;
         private Pasport.ScanApiResponse _lastScanResult = new Pasport.ScanApiResponse
@@ -160,7 +161,18 @@ namespace cmrtd.Infrastructure.DeskoDevice
             {
                 if (_deviceManager.IsConnected)
                 {
-                    
+                    _deviceManager.DebugEvent += (s, e) =>
+                    {
+                        if (!e.LogMessage.Contains("Ignoring unknown argument"))
+                        {
+                            if (e.LogMessage.Contains("Too few boxes with contrast"))
+                            {
+                                _epassport.LastError = true;
+                                Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>> [DEVICE]  Prepareing Restart Application : {_epassport.LastError}");
+                            }
+                        }
+                    };
+
                     if (autoScan == true)
                     {
                         _deviceManager.Device.DocumentStatusChanged += Device_DocumentStatusChanged;
@@ -170,6 +182,7 @@ namespace cmrtd.Infrastructure.DeskoDevice
                     _deviceManager.Device.BarcodeEvent += Device_BarcodeEvent;                    
                     _deviceManager.Device.MsrEvent += Device_MsrEvent;                    
                     _deviceManager.Device.OcrEvent += Device_OcrEvent;
+
                     
                     _deviceManager.Log($"[SCAN] Register Event Handler Success");
                 }
@@ -204,11 +217,10 @@ namespace cmrtd.Infrastructure.DeskoDevice
 
         // event
         bool docPresentLastTime = false;
-        private void Device_DocumentStatusChanged(object sender, DDADocumentStatusChangedEventArgs args)
+        public void Device_DocumentStatusChanged(object sender, DDADocumentStatusChangedEventArgs args)
         {
             try
             {
-                //_deviceManager.Log(">>> Document Detected");
                 var status = _deviceManager.Device.DocumentStatus;
                 bool docPresent = status.HasFlag(DDADocumentStatusFlag.IsDocPresent);
                 bool hasFlipped = status.HasFlag(DDADocumentStatusFlag.IsDocFlipped);
@@ -219,9 +231,22 @@ namespace cmrtd.Infrastructure.DeskoDevice
                     docPresentLastTime = docPresent;
                     if (docPresent)
                     {
-                        _deviceManager.Log(" [DEVICE] Dokumen Masuk");
-                        FeedbackDocPresent();
-                        _ = DoScanRequestAsync();
+                        if (_epassport.LastError)
+                        {
+                            _deviceManager.Log($" [DEVICE] Track Error Scan Sebelumnya : {_epassport.LastError}");
+                            _deviceManager.Log("Prepare Restart App ...");
+                            UnregisterDeviceHandler();
+                            _deviceManager.Disconnect(true);
+
+                        }
+                        else
+                        {
+                            Thread.Sleep(500);
+                            _deviceManager.Log(" [DEVICE] Dokumen Masuk");
+                            _deviceManager.Log($" [DEVICE] Track Error Scan Sebelumnya : {_epassport.LastError}");
+                            FeedbackDocPresent();
+                            _ = DoScanRequestAsync();
+                        }
                     }
                 }
             }
@@ -314,192 +339,214 @@ namespace cmrtd.Infrastructure.DeskoDevice
                 if (task.Rotation != RotateFlipType.RotateNoneFlipNone)
                     bmp.RotateFlip(task.Rotation);
 
-                if (light == DDALightSource.White &&
-                    scanImage.Portrait.Width > 0 &&
-                    scanImage.Portrait.Height > 0)
+                try
                 {
-                    _deviceManager.Log(" [SCAN] Data Page Masuk");                   
-
-                    _deviceManager.Log($" [SCAN] Image dimensions = left: {scanImage.Portrait.Left}, Top: {scanImage.Portrait.Top} px");
-
-                    _deviceManager.Log($" [SCAN] Image dimensions = Width: {scanImage.Portrait.Width}, Height: {scanImage.Portrait.Height} px");
-
-                    _lastScanResult.Data.RgbImage.ImgBase64 = ConvertBitmapToBase64(bmp, ImageFormat.Jpeg);
-                    
-                    string folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "ScanResult");
-                    
-                    Directory.CreateDirectory(folder);
-
-                    // Simpan full WHITE image
-                    string patheWhite = GetUniqueFilePath(folder, $"full_{light}_{DateTime.Now:yyyyMMdd_HHmmss}", ".jpeg");
-                    bmp.Save(patheWhite, ImageFormat.Jpeg);
-
-                    _deviceManager.Log($" [SCAN] WHITE Full Image saved to: {patheWhite}");
-                    _lastScanResult.Data.RgbImage.Location = patheWhite;
-
-                    using (Bitmap portrait = bmp.Clone(scanImage.Portrait, bmp.PixelFormat))
+                    if (light == DDALightSource.White && scanImage.Portrait.Width > 0 && scanImage.Portrait.Height > 0)
                     {
-                        string base64Portrait = ConvertBitmapToBase64(portrait, ImageFormat.Jpeg);
+                        _deviceManager.Log(" [SCAN] Data Page Masuk");
 
-                        _fallbackPortraitBase64 = base64Portrait;
-                        _imageFormat = ImageFormat.Jpeg.ToString();
+                        _deviceManager.Log($" [SCAN] Image dimensions = left: {scanImage.Portrait.Left}, Top: {scanImage.Portrait.Top} px");
 
+                        _deviceManager.Log($" [SCAN] Image dimensions = Width: {scanImage.Portrait.Width}, Height: {scanImage.Portrait.Height} px");
+
+                        _lastScanResult.Data.RgbImage.ImgBase64 = ConvertBitmapToBase64(bmp, ImageFormat.Jpeg);
+
+                        string folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "ScanResult");
+
+                        Directory.CreateDirectory(folder);
+
+                        // Simpan full WHITE image
+                        string patheWhite = GetUniqueFilePath(folder, $"full_{light}_{DateTime.Now:yyyyMMdd_HHmmss}", ".jpeg");
+                        bmp.Save(patheWhite, ImageFormat.Jpeg);
+
+                        _deviceManager.Log($" [SCAN] WHITE Full Image saved to: {patheWhite}");
+                        _lastScanResult.Data.RgbImage.Location = patheWhite;
+
+                        using (Bitmap portrait = bmp.Clone(scanImage.Portrait, bmp.PixelFormat))
+                        {
+                            string base64Portrait = ConvertBitmapToBase64(portrait, ImageFormat.Jpeg);
+
+                            _fallbackPortraitBase64 = base64Portrait;
+                            _imageFormat = ImageFormat.Jpeg.ToString();
+
+                            Rectangle portraitRect = scanImage.Portrait;
+                            //string folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "ScanResult");
+                            //Directory.CreateDirectory(folder);
+
+                            string path = GetUniqueFilePath(folder, $"portrait_{light}_{DateTime.Now:yyyyMMdd_HHmmss}", ".jpeg");
+
+                            portrait.Save(path, ImageFormat.Jpeg);
+
+                            _deviceManager.Log($" [SCAN] Image Portrait saved to: {path}");
+                            _faceLocation = path;
+
+                            if (_lastScanResult.Data.RgbImage.Face == null)
+                            {
+                                _lastScanResult.Data.RgbImage.Face = new Pasport.FaceResult();
+                            }
+
+                            _lastScanResult.Data.RgbImage.FaceLocation = path;
+                            _lastScanResult.Data.RgbImage.Face.Empty = false;
+                            _lastScanResult.Data.RgbImage.Face.Width = scanImage.Portrait.Width;
+                            _lastScanResult.Data.RgbImage.Face.Height = scanImage.Portrait.Height;
+                            _lastScanResult.Data.RgbImage.Face.Left = scanImage.Portrait.Left;
+                            _lastScanResult.Data.RgbImage.Face.Top = scanImage.Portrait.Top;
+
+                        }
+                    }
+
+                }
+                catch (Exception ex)
+                {
+                    _deviceManager.Log($"Error processing White rotation: {ex.Message}");
+                }
+
+                try
+                {
+                    if (light == DDALightSource.Ir)
+                    {
+                        _deviceManager.Log(" [SCAN] IR Data Page Masuk");
+
+                        if (_lastScanResult.Data.IrImage == null)
+                            _lastScanResult.Data.IrImage = new Pasport.ImageResult();
+
+                        string folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "ScanResult");
+                        Directory.CreateDirectory(folder);
+
+                        // Simpan full IR image
+                        string pathIr = GetUniqueFilePath(folder, $"full_{light}_{DateTime.Now:yyyyMMdd_HHmmss}", ".jpeg");
+                        bmp.Save(pathIr, ImageFormat.Jpeg);
+                        _deviceManager.Log($" [SCAN] IR Full Image saved to: {pathIr}");
+
+                        _lastScanResult.Data.IrImage.Location = pathIr;
+                        _lastScanResult.Data.IrImage.ImgBase64 = ConvertBitmapToBase64(bmp, ImageFormat.Jpeg);
+
+
+                        // Tentukan rectangle portrait
                         Rectangle portraitRect = scanImage.Portrait;
-                        //string folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "ScanResult");
-                        //Directory.CreateDirectory(folder);
 
-                        string path = GetUniqueFilePath(folder, $"portrait_{light}_{DateTime.Now:yyyyMMdd_HHmmss}", ".jpeg");
-
-                        portrait.Save(path, ImageFormat.Jpeg);
-
-                        _deviceManager.Log($" [SCAN] Image Portrait saved to: {path}");
-                        _faceLocation = path;
-
-                        if (_lastScanResult.Data.RgbImage.Face == null)
+                        // Kalau IR tidak punya bounding box, fallback dari RGB
+                        if (portraitRect.Width <= 0 || portraitRect.Height <= 0)
                         {
-                            _lastScanResult.Data.RgbImage.Face = new Pasport.FaceResult();
+                            if (_lastScanResult.Data.RgbImage != null && _lastScanResult.Data.RgbImage.Face != null)
+                            {
+                                portraitRect = new Rectangle(
+
+                                    _lastScanResult.Data.RgbImage.Face.Left,
+                                    _lastScanResult.Data.RgbImage.Face.Top,
+                                    _lastScanResult.Data.RgbImage.Face.Width,
+                                    _lastScanResult.Data.RgbImage.Face.Height
+                                );
+
+                                _deviceManager.Log(" [SCAN] IR Portrait fallback to RGB face area.");
+                            }
+                            else
+                            {
+                                _deviceManager.Log(" [SCAN] IR Portrait not found (no fallback available).");
+                                return;
+                            }
                         }
 
-                        _lastScanResult.Data.RgbImage.FaceLocation = path;
-                        _lastScanResult.Data.RgbImage.Face.Empty = false;
-                        _lastScanResult.Data.RgbImage.Face.Width = scanImage.Portrait.Width;
-                        _lastScanResult.Data.RgbImage.Face.Height = scanImage.Portrait.Height;
-                        _lastScanResult.Data.RgbImage.Face.Left = scanImage.Portrait.Left;
-                        _lastScanResult.Data.RgbImage.Face.Top = scanImage.Portrait.Top;
+                        // Simpan portrait berdasarkan bounding box
+                        using (Bitmap portrait = bmp.Clone(portraitRect, bmp.PixelFormat))
+                        {
+                            string base64Portrait = ConvertBitmapToBase64(portrait, ImageFormat.Jpeg);
+                            _lastScanResult.Data.IrImage.ImgFaceBase64 = base64Portrait;
 
+                            string pathPortrait = GetUniqueFilePath(folder, $"portrait_{light}_{DateTime.Now:yyyyMMdd_HHmmss}", ".jpeg");
+                            portrait.Save(pathPortrait, ImageFormat.Jpeg);
+
+                            if (_lastScanResult.Data.IrImage.Face == null)
+                                _lastScanResult.Data.IrImage.Face = new Pasport.FaceResult();
+
+                            _lastScanResult.Data.IrImage.FaceLocation = pathPortrait;
+                            _lastScanResult.Data.IrImage.Face.Empty = false;
+                            _lastScanResult.Data.IrImage.Face.Width = portraitRect.Width;
+                            _lastScanResult.Data.IrImage.Face.Height = portraitRect.Height;
+                            _lastScanResult.Data.IrImage.Face.Left = portraitRect.Left;
+                            _lastScanResult.Data.IrImage.Face.Top = portraitRect.Top;
+
+                            _deviceManager.Log($" [SCAN] IR Portrait saved to: {pathPortrait}");
+                        }
                     }
+
+                }
+                catch (Exception ex)
+                {
+                    _deviceManager.Log($"Error processing IR image: {ex.Message}");
                 }
 
-                if (light == DDALightSource.Ir)
+                try
                 {
-                    _deviceManager.Log(" [SCAN] IR Data Page Masuk");
-
-                    if (_lastScanResult.Data.IrImage == null)
-                        _lastScanResult.Data.IrImage = new Pasport.ImageResult();
-
-                    string folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "ScanResult");
-                    Directory.CreateDirectory(folder);
-
-                    // Simpan full IR image
-                    string pathIr = GetUniqueFilePath(folder, $"full_{light}_{DateTime.Now:yyyyMMdd_HHmmss}", ".jpeg");
-                    bmp.Save(pathIr, ImageFormat.Jpeg);
-                    _deviceManager.Log($" [SCAN] IR Full Image saved to: {pathIr}");
-
-                    _lastScanResult.Data.IrImage.Location = pathIr;
-                    _lastScanResult.Data.IrImage.ImgBase64 = ConvertBitmapToBase64(bmp, ImageFormat.Jpeg);
-
-
-                    // Tentukan rectangle portrait
-                    Rectangle portraitRect = scanImage.Portrait;
-
-                    // Kalau IR tidak punya bounding box, fallback dari RGB
-                    if (portraitRect.Width <= 0 || portraitRect.Height <= 0)
+                    if (light == DDALightSource.Uv)
                     {
-                        if (_lastScanResult.Data.RgbImage != null && _lastScanResult.Data.RgbImage.Face != null)
-                        {
-                            portraitRect = new Rectangle(
-                               
-                                _lastScanResult.Data.RgbImage.Face.Left,
-                                _lastScanResult.Data.RgbImage.Face.Top,                                
-                                _lastScanResult.Data.RgbImage.Face.Width,                                
-                                _lastScanResult.Data.RgbImage.Face.Height
-                            );
+                        _deviceManager.Log(" [SCAN] UV Data Page Masuk");
 
-                            _deviceManager.Log(" [SCAN] IR Portrait fallback to RGB face area.");
-                        }
-                        else
+                        if (_lastScanResult.Data.UvImage == null)
+                            _lastScanResult.Data.UvImage = new Pasport.ImageResult();
+
+                        string folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "ScanResult");
+                        Directory.CreateDirectory(folder);
+
+                        // Clone agar thread-safe
+                        Bitmap bmpCopy;
+                        lock (bmp)
+                            bmpCopy = (Bitmap)bmp.Clone();
+
+                        // Simpan full UV
+                        string pathFullUv = GetUniqueFilePath(folder, $"full_{light}_{DateTime.Now:yyyyMMdd_HHmmss}", ".jpeg");
+                        bmpCopy.Save(pathFullUv, ImageFormat.Jpeg);
+                        _lastScanResult.Data.UvImage.Location = pathFullUv;
+                        _lastScanResult.Data.UvImage.ImgBase64 = ConvertBitmapToBase64(bmpCopy, ImageFormat.Jpeg);
+
+                        // Tentukan portrait rect
+                        Rectangle portraitRect = scanImage.Portrait;
+
+                        if (portraitRect.Width <= 0 || portraitRect.Height <= 0)
                         {
-                            _deviceManager.Log(" [SCAN] IR Portrait not found (no fallback available).");
-                            return;
+                            if (_lastScanResult.Data.RgbImage?.Face != null)
+                            {
+                                portraitRect = new Rectangle(
+                                    _lastScanResult.Data.RgbImage.Face.Left,
+                                    _lastScanResult.Data.RgbImage.Face.Top,
+                                    _lastScanResult.Data.RgbImage.Face.Width,
+                                    _lastScanResult.Data.RgbImage.Face.Height
+                                );
+
+                                _deviceManager.Log(" [SCAN] UV Portrait fallback ke RGB face area.");
+                            }
+                            else
+                            {
+                                _deviceManager.Log(" [SCAN] UV Portrait tidak ditemukan (no fallback).");
+                                return;
+                            }
+                        }
+
+                        // Crop portrait UV
+                        using (Bitmap portrait = bmpCopy.Clone(portraitRect, bmpCopy.PixelFormat))
+                        {
+                            string base64Portrait = ConvertBitmapToBase64(portrait, ImageFormat.Jpeg);
+                            _lastScanResult.Data.UvImage.ImgFaceBase64 = base64Portrait;
+
+                            string pathPortrait = GetUniqueFilePath(folder, $"portrait_{light}_{DateTime.Now:yyyyMMdd_HHmmss}", ".jpeg");
+                            portrait.Save(pathPortrait, ImageFormat.Jpeg);
+
+                            _lastScanResult.Data.UvImage.Face ??= new Pasport.FaceResult();
+                            _lastScanResult.Data.UvImage.FaceLocation = pathPortrait;
+                            _lastScanResult.Data.UvImage.Face.Empty = false;
+                            _lastScanResult.Data.UvImage.Face.Width = portraitRect.Width;
+                            _lastScanResult.Data.UvImage.Face.Height = portraitRect.Height;
+                            _lastScanResult.Data.UvImage.Face.Left = portraitRect.Left;
+                            _lastScanResult.Data.UvImage.Face.Top = portraitRect.Top;
+
+                            _deviceManager.Log($" [SCAN] UV Portrait saved to: {pathPortrait}");
                         }
                     }
 
-                    // Simpan portrait berdasarkan bounding box
-                    using (Bitmap portrait = bmp.Clone(portraitRect, bmp.PixelFormat))
-                    {
-                        string base64Portrait = ConvertBitmapToBase64(portrait, ImageFormat.Jpeg);
-                        _lastScanResult.Data.IrImage.ImgFaceBase64 = base64Portrait;
-
-                        string pathPortrait = GetUniqueFilePath(folder, $"portrait_{light}_{DateTime.Now:yyyyMMdd_HHmmss}", ".jpeg");
-                        portrait.Save(pathPortrait, ImageFormat.Jpeg);
-
-                        if (_lastScanResult.Data.IrImage.Face == null)
-                            _lastScanResult.Data.IrImage.Face = new Pasport.FaceResult();
-
-                        _lastScanResult.Data.IrImage.FaceLocation = pathPortrait;
-                        _lastScanResult.Data.IrImage.Face.Empty = false;
-                        _lastScanResult.Data.IrImage.Face.Width = portraitRect.Width;
-                        _lastScanResult.Data.IrImage.Face.Height = portraitRect.Height;
-                        _lastScanResult.Data.IrImage.Face.Left = portraitRect.Left;
-                        _lastScanResult.Data.IrImage.Face.Top = portraitRect.Top;
-
-                        _deviceManager.Log($" [SCAN] IR Portrait saved to: {pathPortrait}");
-                    }
                 }
-
-                if (light == DDALightSource.Uv)
+                catch (Exception ex)
                 {
-                    _deviceManager.Log(" [SCAN] UV Data Page Masuk");
-
-                    if (_lastScanResult.Data.UvImage == null)
-                        _lastScanResult.Data.UvImage = new Pasport.ImageResult();
-
-                    string folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "ScanResult");
-                    Directory.CreateDirectory(folder);
-
-                    // Clone agar thread-safe
-                    Bitmap bmpCopy;
-                    lock (bmp)
-                        bmpCopy = (Bitmap)bmp.Clone();
-
-                    // Simpan full UV
-                    string pathFullUv = GetUniqueFilePath(folder, $"full_{light}_{DateTime.Now:yyyyMMdd_HHmmss}", ".jpeg");
-                    bmpCopy.Save(pathFullUv, ImageFormat.Jpeg);
-                    _lastScanResult.Data.UvImage.Location = pathFullUv;
-                    _lastScanResult.Data.UvImage.ImgBase64 = ConvertBitmapToBase64(bmpCopy, ImageFormat.Jpeg);
-
-                    // Tentukan portrait rect
-                    Rectangle portraitRect = scanImage.Portrait;
-
-                    if (portraitRect.Width <= 0 || portraitRect.Height <= 0)
-                    {
-                        if (_lastScanResult.Data.RgbImage?.Face != null)
-                        {
-                            portraitRect = new Rectangle(
-                                _lastScanResult.Data.RgbImage.Face.Left,
-                                _lastScanResult.Data.RgbImage.Face.Top,
-                                _lastScanResult.Data.RgbImage.Face.Width,
-                                _lastScanResult.Data.RgbImage.Face.Height
-                            );
-
-                            _deviceManager.Log(" [SCAN] UV Portrait fallback ke RGB face area.");
-                        }
-                        else
-                        {
-                            _deviceManager.Log(" [SCAN] UV Portrait tidak ditemukan (no fallback).");
-                            return;
-                        }
-                    }
-
-                    // Crop portrait UV
-                    using (Bitmap portrait = bmpCopy.Clone(portraitRect, bmpCopy.PixelFormat))
-                    {
-                        string base64Portrait = ConvertBitmapToBase64(portrait, ImageFormat.Jpeg);
-                        _lastScanResult.Data.UvImage.ImgFaceBase64 = base64Portrait;
-
-                        string pathPortrait = GetUniqueFilePath(folder, $"portrait_{light}_{DateTime.Now:yyyyMMdd_HHmmss}", ".jpeg");
-                        portrait.Save(pathPortrait, ImageFormat.Jpeg);
-
-                        _lastScanResult.Data.UvImage.Face ??= new Pasport.FaceResult();
-                        _lastScanResult.Data.UvImage.FaceLocation = pathPortrait;
-                        _lastScanResult.Data.UvImage.Face.Empty = false;
-                        _lastScanResult.Data.UvImage.Face.Width = portraitRect.Width;
-                        _lastScanResult.Data.UvImage.Face.Height = portraitRect.Height;
-                        _lastScanResult.Data.UvImage.Face.Left = portraitRect.Left;
-                        _lastScanResult.Data.UvImage.Face.Top = portraitRect.Top;
-
-                        _deviceManager.Log($" [SCAN] UV Portrait saved to: {pathPortrait}");
-                    }
+                    _deviceManager.Log($"Error processing UV image: {ex.Message}");
                 }
             }
 
@@ -571,7 +618,7 @@ namespace cmrtd.Infrastructure.DeskoDevice
                             Console.WriteLine($"[UEPASS] Waktu baca chip: {sw.Elapsed.TotalSeconds:F2} detik");
                             sw.Restart();
                             // cek hasil
-                            string faceBase64;
+                            string faceBase64 = null;
 
                             if (!string.IsNullOrEmpty(_epassport.FaceBase64))
                             {
@@ -588,7 +635,7 @@ namespace cmrtd.Infrastructure.DeskoDevice
                             else
                             {
                                 _deviceManager.Log("[BASE64] Tidak ada image yang bisa dikirim");
-                                return;
+                                //return;
                             }
 
                             _lastScanResult.Data.RgbImage.ImgFaceBase64 = faceBase64;
@@ -621,13 +668,23 @@ namespace cmrtd.Infrastructure.DeskoDevice
                                     faceBase64,
                                     _deviceSettings.Callback.Url,
                                     format,
-                                    faceLocation);
+                                    faceLocation,
+                                    _lastScanResult.Err_msg
+                                 );
                             }
                             Console.WriteLine($"[API] Semua task selesai dalam {sw.Elapsed.TotalSeconds:F2} detik");
 
-                            faceBase64 = null;
-                            _epassport.FaceBase64 = null;
-                            _fallbackPortraitBase64 = null;
+                            _helper.Cleaner
+                            (
+                                _lastScanResult.Data.MRZ,
+                                ocrString,
+                                _lastScanResult.Data.RgbImage.ImgBase64,
+                                _lastScanResult.Data.RgbImage.Location,
+                                faceBase64,
+                                _deviceSettings.Callback.Url,
+                                format,
+                                _lastScanResult.Data.RgbImage.FaceLocation
+                                );
                         }
                         catch (Exception ex)
                         {

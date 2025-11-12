@@ -187,7 +187,30 @@ namespace cmrtd.Core
             Attention,
             Off
         }
-        
+
         #endregion
+
+        public void Cleaner(
+            string mrz,
+            string ocrString,
+            string faceBase64,
+            string ImgBase64,
+            string Location,
+            string Url,
+            string format,
+            string FaceLocation
+            )
+        {
+            mrz = null;
+            ocrString = null;
+            faceBase64 = null;
+            ImgBase64 = null;
+            Location = null;
+            Url = null;
+            format = null;
+            FaceLocation = null;
+
+            Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  CleanUp Data In Memory");
+        }
     }
 }
