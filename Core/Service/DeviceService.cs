@@ -5,6 +5,7 @@ using Desko.ePass;
 using Desko.EPass;
 using Desko.FullPage;
 using System.Diagnostics;
+using System.Diagnostics.Contracts;
 
 namespace cmrtd.Core.Service
 {
@@ -87,6 +88,21 @@ namespace cmrtd.Core.Service
                                 if (_deviceManager != null && _deviceManager.IsConnected)
                                 {
                                     Console.WriteLine($">>> [DEVICE] Auto-connected successfully.");
+                                    bool docPresentLastTime = false;
+                                    var status = _deviceManager.Device.DocumentStatus;
+                                    bool docPresent = status.HasFlag(DDADocumentStatusFlag.IsDocPresent);
+                                    bool hasFlipped = status.HasFlag(DDADocumentStatusFlag.IsDocFlipped);
+                                    bool docPresenceChanged = docPresent != docPresentLastTime || hasFlipped;
+
+                                    if (docPresenceChanged)
+                                    {
+                                        docPresentLastTime = docPresent;
+                                        if (docPresent)
+                                        {
+                                            _deviceManager.Log(" [DEVICE] Dokumen Masuk");
+                                            _ = _deviceHandler.DoScanRequestAsync();
+                                        }
+                                    }
                                     _lastErrorMessage = null;
                                 }
                                 else
@@ -101,12 +117,8 @@ namespace cmrtd.Core.Service
                         });
                     }
                 }
-                else if (!e.LogMessage.Contains("Ignoring unknown argument"))
-                {
-                    Console.WriteLine($">>> [DEVICE] Debug: {e.LogMessage}");
-                }
             };
-
+                    
             try
             {
                 Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>> [DEVICE] Connecting...");
@@ -135,7 +147,6 @@ namespace cmrtd.Core.Service
                     // event scan done
                     _deviceManager.Device.ImageRequestDoneEvent += (s, e) =>
                     {
-                        Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [DEVICE] Ready For Next Scan");
                         scanDoneEvent.Set();
                     };
 
@@ -312,7 +323,7 @@ namespace cmrtd.Core.Service
             return (false, ""); // default error kosong kalau memang hanya disconnect biasa
         }
 
-        private void SafeDisconnect()
+        public void SafeDisconnect()
         {
             try
             {

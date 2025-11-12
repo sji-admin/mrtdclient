@@ -68,14 +68,14 @@ namespace cmrtd.Core.Service
 
         }
 
-        public async Task SendCallbackAsync(string mrz, string datapage64, string location,string imgBase64, string url, string imgformat, string faceLocation)
+        public async Task SendCallbackAsync(string mrz, string datapage64, string location,string imgBase64, string url, string imgformat, string faceLocation, string msgError)
         {
             var payload = new Callback
             {
                 body = new Body
                 {
                     code = 200,
-                    err_msg = "",
+                    err_msg = msgError,
                     data = new Data
                     {
                         mrz = mrz,
