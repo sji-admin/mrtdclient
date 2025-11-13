@@ -165,10 +165,10 @@ namespace cmrtd.Infrastructure.DeskoDevice
                     {
                         if (!e.LogMessage.Contains("Ignoring unknown argument"))
                         {
-                            if (e.LogMessage.Contains("Too few boxes with contrast"))
+                            if (e.LogMessage.Contains("MRZ not available. Skipping UV dullness check."))
                             {
                                 _epassport.LastError = true;
-                                Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>> [DEVICE]  Prepareing Restart Application : {_epassport.LastError}");
+                                Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>> [DEVICE]  Prepareing Unrigster Event : {_epassport.LastError}");
                             }
                         }
                     };
@@ -233,17 +233,18 @@ namespace cmrtd.Infrastructure.DeskoDevice
                     {
                         if (_epassport.LastError)
                         {
-                            _deviceManager.Log($" [DEVICE] Track Error Scan Sebelumnya : {_epassport.LastError}");
-                            _deviceManager.Log("Prepare Restart App ...");
+                            _deviceManager.Log($" [DEVICE] Previous Error Scan : {_epassport.LastError}");
+                            _deviceManager.Log("Prepare Dispose and Unregister Event App ...");
                             UnregisterDeviceHandler();
-                            _deviceManager.Disconnect(true);
+                            _epassport.LastError = false;
+                            _deviceManager.UnregiterDispose(true);
 
                         }
                         else
                         {
                             Thread.Sleep(500);
                             _deviceManager.Log(" [DEVICE] Dokumen Masuk");
-                            _deviceManager.Log($" [DEVICE] Track Error Scan Sebelumnya : {_epassport.LastError}");
+                            _deviceManager.Log($" [DEVICE] Previous Error Scan : {_epassport.LastError}");
                             FeedbackDocPresent();
                             _ = DoScanRequestAsync();
                         }
@@ -702,7 +703,7 @@ namespace cmrtd.Infrastructure.DeskoDevice
         }
 
         // Feedback
-        protected void FeedbackDocPresent()
+        public void FeedbackDocPresent()
         {
             if (_deviceManager.Device != null && _deviceManager.Device.NumberOfBuzzers > 0)
             {

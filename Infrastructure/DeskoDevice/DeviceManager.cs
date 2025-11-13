@@ -151,7 +151,7 @@ namespace cmrtd.Infrastructure.DeskoDevice
             _buzzerDevices = new DDADevice[_device.NumberOfBuzzers];
 
             FireConnectionChanged();
-        }        
+        }
 
         public void Disconnect(bool dispose)
         {
@@ -229,5 +229,26 @@ namespace cmrtd.Infrastructure.DeskoDevice
             //}
         }
 
+        public void UnregiterDispose(bool dispose)
+        {
+            if (_device == null)
+                return;
+
+            if (dispose)
+            {
+                _device.Dispose();
+                _device = null;
+                _devicePath = "";
+                _deviceDescriptor = null;
+                _leds = null;
+                _ledDevices = null;
+            }
+            else
+            {
+                _device.Disconnect();
+            }
+
+            FireConnectionChanged();
+        }
     }
 }

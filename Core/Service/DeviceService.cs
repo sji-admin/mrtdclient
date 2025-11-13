@@ -40,10 +40,7 @@ namespace cmrtd.Core.Service
             if (Desko.ePass.Api.Settings.TargetImageFormat == ImageFormat.Unknown)
             {
                 Desko.ePass.Api.Settings.TargetImageFormat = ImageFormat.JPG;
-                Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>> [DEVICE] Default TargetImageFormat was set to JPG");
-            }
-            
-            Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>> [DEVICE] Initialized");
+            }            
 
             _deviceManager = new DeviceManager();
 
@@ -70,8 +67,6 @@ namespace cmrtd.Core.Service
                 }
                 else if (e.LogMessage.Contains("DIMIS entry added for device id"))
                 {
-                    Console.WriteLine($">>> [DEVICE] New device detected, trying to connect...");
-
                     if (_deviceManager.IsConnected)
                     {
                         Console.WriteLine($">>> [DEVICE] Device Already Connected");
@@ -116,6 +111,10 @@ namespace cmrtd.Core.Service
                             }
                         });
                     }
+                }
+                else 
+                {
+                    // TODO : normal log
                 }
             };
                     
