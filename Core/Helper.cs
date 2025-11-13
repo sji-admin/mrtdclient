@@ -211,6 +211,7 @@ namespace cmrtd.Core
             FaceLocation = null;
 
             Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  CleanUp Data In Memory");
+            Thread.Sleep(300);
         }
     }
 }
