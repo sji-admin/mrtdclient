@@ -160,24 +160,6 @@ namespace cmrtd
                     }
                 }
 
-                //if (!query.TryGetValue("full", out var fullStr))
-                //{
-                //    return Results.BadRequest(new
-                //    {
-                //        status = "error",
-                //        message = "Parameter 'full' is required. Please provide ?full=true or ?full=false"
-                //    });
-                //}
-
-                //if (!bool.TryParse(fullStr, out var full))
-                //{
-                //    return Results.BadRequest(new
-                //    {
-                //        status = "error",
-                //        message = "Parameter 'full' must be true or false"
-                //    });
-                //}
-
                 query.TryGetValue("device_id", out var serialParam);
                 string serial = serialParam.ToString()?.Trim() ?? "";
 
