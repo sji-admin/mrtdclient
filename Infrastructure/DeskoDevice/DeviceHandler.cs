@@ -16,8 +16,7 @@ namespace cmrtd.Infrastructure.DeskoDevice
     public class DeviceHandler
     {
         private readonly DeviceManager _deviceManager;
-        private readonly Channel<ScanImageTask> _imageProcessingChannel = Channel.CreateUnbounded<ScanImageTask>();
-        private readonly SemaphoreSlim _scanLock = new SemaphoreSlim(1, 1);        
+        private readonly Channel<ScanImageTask> _imageProcessingChannel = Channel.CreateUnbounded<ScanImageTask>();        
         private readonly int _targetDpi;
         private readonly DeviceSettings _deviceSettings;
         private readonly CallbackSettings _callbackSettings;
@@ -25,7 +24,6 @@ namespace cmrtd.Infrastructure.DeskoDevice
         private readonly Epassport _epassport = new Epassport();
         private readonly Helper _helper = new Helper();
         public Pasport.ScanApiResponse LastScanResult => _lastScanResult;
-        private TaskCompletionSource<Pasport.ScanApiResponse> _scanCompletionSource;
         private Pasport.ScanApiResponse _lastScanResult = new Pasport.ScanApiResponse
         {
             Code = 200,
@@ -37,6 +35,7 @@ namespace cmrtd.Infrastructure.DeskoDevice
                 IrImage = new Pasport.ImageResult()
             }
         };
+        private TaskCompletionSource<Pasport.ScanApiResponse> _scanCompletionSource; 
         private string _fallbackPortraitBase64;
         private string _imageFormat;
         private string _faceLocation;
@@ -56,7 +55,6 @@ namespace cmrtd.Infrastructure.DeskoDevice
         // Image Scan
         public async Task<Pasport.ScanApiResponse> DoScanRequestAsync(CancellationToken cancellationToken = default)
         {
-            await _scanLock.WaitAsync();
             try
             {
                 _lastOcrString = null;
@@ -148,7 +146,7 @@ namespace cmrtd.Infrastructure.DeskoDevice
             }
             finally
             {
-                _scanLock.Release();
+                //_scanLock.Release();
             }
         }
         
@@ -165,10 +163,26 @@ namespace cmrtd.Infrastructure.DeskoDevice
                     {
                         if (!e.LogMessage.Contains("Ignoring unknown argument"))
                         {
-                            if (e.LogMessage.Contains("MRZ not available. Skipping UV dullness check."))
+                            if (e.LogMessage.Contains("_isUvDullMrz MRZ not available. Skipping UV dullness check."))
                             {
                                 _epassport.LastError = true;
-                                Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>> [DEVICE]  Prepareing Unrigster Event : {_epassport.LastError}");
+                                _lastScanResult.Err_msg = e.LogMessage;
+                                Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>> [DEVICE]  Prepareing MRZ Not Availabel Callback : {e.LogMessage}");
+                                if (_epassport.LastError)
+                                {
+                                    _ = _apiService.SendCallbackAsync(
+                                        "",
+                                        "",
+                                        "",
+                                        "",
+                                        _deviceSettings.Callback.Url,
+                                        "",
+                                        "",
+                                        LastScanResult.Err_msg
+                                     );
+                                }
+                                _epassport.LastError = false;
+                                LastScanResult.Err_msg = "";
                             }
                         }
                     };
@@ -231,23 +245,11 @@ namespace cmrtd.Infrastructure.DeskoDevice
                     docPresentLastTime = docPresent;
                     if (docPresent)
                     {
-                        if (_epassport.LastError)
-                        {
-                            _deviceManager.Log($" [DEVICE] Previous Error Scan : {_epassport.LastError}");
-                            _deviceManager.Log("Prepare Dispose and Unregister Event App ...");
-                            UnregisterDeviceHandler();
-                            _epassport.LastError = false;
-                            _deviceManager.UnregiterDispose(true);
-
-                        }
-                        else
-                        {
-                            Thread.Sleep(500);
-                            _deviceManager.Log(" [DEVICE] Dokumen Masuk");
-                            _deviceManager.Log($" [DEVICE] Previous Error Scan : {_epassport.LastError}");
-                            FeedbackDocPresent();
-                            _ = DoScanRequestAsync();
-                        }
+                        Thread.Sleep(500);
+                        _deviceManager.Log(" [DEVICE] Dokumen Masuk");
+                        _deviceManager.Log($" [DEVICE] Previous Error Scan : {_epassport.LastError}");
+                        FeedbackDocPresent();
+                        _ = DoScanRequestAsync();
                     }
                 }
             }
@@ -590,7 +592,6 @@ namespace cmrtd.Infrastructure.DeskoDevice
 
         private void Device_OcrEvent(object sender, DDAOcrEventArgs args)
         {
-            
             try
             {
                 if (args.Content is { Length: > 0 })
@@ -671,9 +672,9 @@ namespace cmrtd.Infrastructure.DeskoDevice
                                     format,
                                     faceLocation,
                                     _lastScanResult.Err_msg
-                                 );
+                                    );
                             }
-                            Console.WriteLine($"[API] Semua task selesai dalam {sw.Elapsed.TotalSeconds:F2} detik");
+                            _deviceManager.Log($"[API] Semua task selesai dalam {sw.Elapsed.TotalSeconds:F2} detik");
 
                             _helper.Cleaner
                             (

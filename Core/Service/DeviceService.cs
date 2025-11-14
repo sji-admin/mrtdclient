@@ -18,6 +18,7 @@ namespace cmrtd.Core.Service
         private DeviceHandler _deviceHandler;
         private DevicePscan _devicePscan;
         private bool _disposed;
+        private readonly Epassport _epassport = new Epassport();
         private static readonly ManualResetEvent scanDoneEvent = new(false);
         private string _lastErrorMessage;
         public Pasport.ScanApiResponse LastScanResult => _deviceHandler.LastScanResult;
@@ -73,7 +74,7 @@ namespace cmrtd.Core.Service
                     }
                     else
                     {
-                        Task.Run(() =>
+                        Task.Run(async () =>
                         {
                             try
                             {
@@ -111,10 +112,11 @@ namespace cmrtd.Core.Service
                             }
                         });
                     }
-                }
-                else 
+                }                
+                else
                 {
                     // TODO : normal log
+                    Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>> [DEVICE] {e.LogMessage}");
                 }
             };
                     
@@ -183,8 +185,6 @@ namespace cmrtd.Core.Service
             }
         }
 
-        private static readonly SemaphoreSlim _scanLock = new SemaphoreSlim(1, 1);
-
         public async Task<Pasport.ScanApiResponse> DoScanAsync()
         {
             if (_deviceSettings.AutoScan)
@@ -197,20 +197,42 @@ namespace cmrtd.Core.Service
                 };
             }
 
-            await _scanLock.WaitAsync();
+            if (_deviceManager == null || !_deviceManager.IsConnected)
+                throw new InvalidOperationException("Device is not connected");
+
+            if (_deviceHandler == null)
+                throw new InvalidOperationException("Device handler is not initialized");
+
+
+            var totalTimeoutSeconds = 20;
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(totalTimeoutSeconds));
+
+            var scanTask = DoScanInternalAsync(cts.Token);
+
+            var completed = await Task.WhenAny(scanTask, Task.Delay(Timeout.Infinite, cts.Token));
+
+            if (completed == scanTask)
+                return await scanTask; 
+
+            return new Pasport.ScanApiResponse
+            {
+                Code = 408,
+                Valid = false,
+                Err_msg = $"Scan timeout : {totalTimeoutSeconds}s. Please Scan Again"
+            };
+        }
+
+        public async Task<Pasport.ScanApiResponse> DoScanInternalAsync(CancellationToken token)
+        {
             try
             {
-                if (_deviceManager == null || !_deviceManager.IsConnected)
-                    throw new InvalidOperationException("Device is not connected");
-
-                if (_deviceHandler == null)
-                    throw new InvalidOperationException("Device handler is not initialized");
 
                 Console.WriteLine("[SCAN] Waiting for document to be inserted...");
-                
+
                 var sw = Stopwatch.StartNew();
                 while (true)
                 {
+
                     var status = _deviceManager.Device.DocumentStatus;
                     if (status.HasFlag(DDADocumentStatusFlag.IsDocPresent))
                     {
@@ -234,11 +256,10 @@ namespace cmrtd.Core.Service
                 scanDoneEvent.Reset();
 
                 Console.WriteLine("[SCAN] Starting manual scan...");
-                //_deviceHandler.LastScanResult = null;
                 await _deviceHandler.DoScanRequestAsync();
 
                 // Tunggu sampai scan selesai
-                bool completed = scanDoneEvent.WaitOne(TimeSpan.FromSeconds(30));
+                bool completed = scanDoneEvent.WaitOne(TimeSpan.FromSeconds(10));
                 sw.Stop();
 
                 if (!completed)
@@ -267,9 +288,9 @@ namespace cmrtd.Core.Service
             }
             finally
             {
-                _scanLock.Release();
+                //_scanLock.Release();
             }
-        }        
+        }
 
         public string Reconnect()
         {
@@ -404,7 +425,7 @@ namespace cmrtd.Core.Service
                 };
             }
 
-            await _scanLock.WaitAsync();
+            //await _scanLock.WaitAsync();
             try
             {
                 Console.WriteLine("[SCAN] Waiting for document to be inserted...");
@@ -452,7 +473,7 @@ namespace cmrtd.Core.Service
             }
             finally
             {                
-                _scanLock.Release();
+                //_scanLock.Release();
             }
         }
 
