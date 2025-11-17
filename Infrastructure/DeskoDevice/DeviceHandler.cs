@@ -9,6 +9,7 @@ using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Channels;
+using System.Threading; // add near other using statements
 
 namespace cmrtd.Infrastructure.DeskoDevice
 {
@@ -23,6 +24,8 @@ namespace cmrtd.Infrastructure.DeskoDevice
         private readonly ApiService _apiService;
         private readonly Epassport _epassport = new Epassport();
         private readonly Helper _helper = new Helper();
+        private Pasport.ScanApiResponse _pendingErrorResponse;
+        private long _pendingErrorTicks;
         public Pasport.ScanApiResponse LastScanResult => _lastScanResult;
         private Pasport.ScanApiResponse _lastScanResult = new Pasport.ScanApiResponse
         {
@@ -40,8 +43,6 @@ namespace cmrtd.Infrastructure.DeskoDevice
         private string _imageFormat;
         private string _faceLocation;
         private RotateFlipType _rotationCorrection = RotateFlipType.RotateNoneFlipNone;
-
-
 
         public DeviceHandler(DeviceManager deviceManager, int targetDpi, CallbackSettings callbackSettings, DeviceSettings deviceSettings, ApiService apiService)
         {
@@ -61,6 +62,18 @@ namespace cmrtd.Infrastructure.DeskoDevice
 
                 _scanCompletionSource = new TaskCompletionSource<Pasport.ScanApiResponse>(
                     TaskCreationOptions.RunContinuationsAsynchronously);
+
+                var pending = Interlocked.Exchange(ref _pendingErrorResponse, null);
+                if (pending != null)
+                {
+                    // check timestamp expiry (2 detik)
+                    var ticks = Interlocked.Exchange(ref _pendingErrorTicks, 0L);
+                    if (ticks != 0 && (DateTime.UtcNow - new DateTime(ticks) < TimeSpan.FromSeconds(2)))
+                    {
+                        _deviceManager.Log("[SCAN] Returning pending device error before starting scan (fresh).");
+                        return pending;
+                    }                    
+                }
 
                 bool doCoax = false;
                 bool doOvd = false;
@@ -168,19 +181,21 @@ namespace cmrtd.Infrastructure.DeskoDevice
                                 _epassport.LastError = true;
                                 _lastScanResult.Err_msg = e.LogMessage;
                                 Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>> [DEVICE]  Prepareing MRZ Not Availabel Callback : {e.LogMessage}");
-                                if (_epassport.LastError)
+
+                                var errorResponse = new Pasport.ScanApiResponse
                                 {
-                                    _ = _apiService.SendCallbackAsync(
-                                        "",
-                                        "",
-                                        "",
-                                        "",
-                                        _deviceSettings.Callback.Url,
-                                        "",
-                                        "",
-                                        LastScanResult.Err_msg
-                                     );
-                                }
+                                    Code = 408,
+                                    Valid = false,
+                                    Err_msg = e.LogMessage
+                                };
+
+                                // store pending error so future DoScanRequestAsync returns immediately
+                                Interlocked.Exchange(ref _pendingErrorResponse, errorResponse);
+                                Interlocked.Exchange(ref _pendingErrorTicks, DateTime.UtcNow.Ticks);
+
+                                // if a scan is currently waiting, complete it now
+                                _scanCompletionSource?.TrySetResult(errorResponse);
+
                                 _epassport.LastError = false;
                                 LastScanResult.Err_msg = "";
                             }
@@ -376,7 +391,7 @@ namespace cmrtd.Infrastructure.DeskoDevice
                             //string folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "ScanResult");
                             //Directory.CreateDirectory(folder);
 
-                            string path = GetUniqueFilePath(folder, $"portrait_{light}_{DateTime.Now:yyyyMMdd_HHmmss}", ".jpeg");
+                            string path = Path.Combine(folder, "face.jpeg");
 
                             portrait.Save(path, ImageFormat.Jpeg);
 

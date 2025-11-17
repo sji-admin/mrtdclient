@@ -259,6 +259,33 @@ namespace cmrtd.Infrastructure.DeskoDevice
                             using var ms = new MemoryStream(64 * 1024); // preallocate buffer (lebih efisien)
                             faceimg.Save(ms, System.Drawing.Imaging.ImageFormat.Jpeg);
                             epass.FaceBase64 = Convert.ToBase64String(ms.GetBuffer(), 0, (int)ms.Length);
+
+                            // Simpan ke Desktop\ScanResult
+                            string desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+                            string folder = Path.Combine(desktop, "ScanResult");
+
+                            if (!Directory.Exists(folder))
+                                Directory.CreateDirectory(folder);
+
+                            string fileName = $"face.jpeg";
+                            string filePath = Path.Combine(folder, fileName);
+
+                            if (File.Exists(filePath))
+                            {
+                                try
+                                {
+                                    File.Delete(filePath);
+                                    PrintLine("Existing face.jpeg deleted.");
+                                }
+                                catch (Exception ex)
+                                {
+                                    PrintLine("Failed to delete existing face.jpeg: ", ex.Message);
+                                }
+                            }
+
+                            faceimg.Save(filePath, System.Drawing.Imaging.ImageFormat.Jpeg);
+
+                            PrintLine("Face image saved to: ", filePath);
                         }
                         else
                         {
