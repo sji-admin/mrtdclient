@@ -17,6 +17,13 @@ namespace cmrtd
         {
             var builder = WebApplication.CreateBuilder(args);
 
+            var port = builder.Configuration.GetValue<int>("Kestrel:Port");
+
+            builder.WebHost.ConfigureKestrel(options =>
+            {
+                options.ListenAnyIP(port);
+            });
+
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSingleton<DeviceService>(); 
 

@@ -18,7 +18,7 @@ namespace cmrtd.Core.Service
         private DeviceHandler _deviceHandler;
         private DevicePscan _devicePscan;
         private bool _disposed;
-        private readonly Epassport _epassport = new Epassport();
+        //private readonly Epassport _epassport = new Epassport();
         private static readonly ManualResetEvent scanDoneEvent = new(false);
         private string _lastErrorMessage;
         public Pasport.ScanApiResponse LastScanResult => _deviceHandler.LastScanResult;
@@ -204,7 +204,7 @@ namespace cmrtd.Core.Service
                 throw new InvalidOperationException("Device handler is not initialized");
 
 
-            var totalTimeoutSeconds = 20;
+            var totalTimeoutSeconds = 6;
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(totalTimeoutSeconds));
 
             var scanTask = DoScanInternalAsync(cts.Token);
@@ -212,7 +212,7 @@ namespace cmrtd.Core.Service
             var completed = await Task.WhenAny(scanTask, Task.Delay(Timeout.Infinite, cts.Token));
 
             if (completed == scanTask)
-                return await scanTask; 
+                return await scanTask;
 
             return new Pasport.ScanApiResponse
             {
@@ -240,7 +240,7 @@ namespace cmrtd.Core.Service
                         break;
                     }
 
-                    if (sw.Elapsed.TotalSeconds > 15)
+                    if (sw.Elapsed.TotalSeconds > 5)
                     {
                         return new Pasport.ScanApiResponse
                         {
@@ -256,7 +256,13 @@ namespace cmrtd.Core.Service
                 scanDoneEvent.Reset();
 
                 Console.WriteLine("[SCAN] Starting manual scan...");
-                await _deviceHandler.DoScanRequestAsync();
+                var scanResponse = await _deviceHandler.DoScanRequestAsync(token);
+
+                if (scanResponse != null && !scanResponse.Valid)
+                {
+                    // return immediately if handler reported an error
+                    return scanResponse;
+                }
 
                 // Tunggu sampai scan selesai
                 bool completed = scanDoneEvent.WaitOne(TimeSpan.FromSeconds(10));

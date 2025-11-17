@@ -119,7 +119,7 @@ namespace cmrtd.Core.Service
                 Console.WriteLine($">>> [CALLBACK] Error: {ex.Message}");
             }
         }
-    
-    
+
+        
     }
 }
