@@ -8,8 +8,8 @@ using System.Drawing.Imaging;
 using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
+//using System.Threading;
 using System.Threading.Channels;
-using System.Threading; // add near other using statements
 
 namespace cmrtd.Infrastructure.DeskoDevice
 {
@@ -113,6 +113,7 @@ namespace cmrtd.Infrastructure.DeskoDevice
                 }, cancellationToken);
 
                 FeedbackStartScan();
+                _helper.Cleaner(_lastScanResult, _fallbackPortraitBase64);
                 _deviceManager.Log($"[SCAN] Scan in progress...");
 
                 using (cancellationToken.Register(() => _scanCompletionSource.TrySetCanceled()))
@@ -174,32 +175,7 @@ namespace cmrtd.Infrastructure.DeskoDevice
                 {
                     _deviceManager.DebugEvent += (s, e) =>
                     {
-                        if (!e.LogMessage.Contains("Ignoring unknown argument"))
-                        {
-                            if (e.LogMessage.Contains("_isUvDullMrz MRZ not available. Skipping UV dullness check."))
-                            {
-                                _epassport.LastError = true;
-                                _lastScanResult.Err_msg = e.LogMessage;
-                                Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>> [DEVICE]  Prepareing MRZ Not Availabel Callback : {e.LogMessage}");
-
-                                var errorResponse = new Pasport.ScanApiResponse
-                                {
-                                    Code = 408,
-                                    Valid = false,
-                                    Err_msg = e.LogMessage
-                                };
-
-                                // store pending error so future DoScanRequestAsync returns immediately
-                                Interlocked.Exchange(ref _pendingErrorResponse, errorResponse);
-                                Interlocked.Exchange(ref _pendingErrorTicks, DateTime.UtcNow.Ticks);
-
-                                // if a scan is currently waiting, complete it now
-                                _scanCompletionSource?.TrySetResult(errorResponse);
-
-                                _epassport.LastError = false;
-                                LastScanResult.Err_msg = "";
-                            }
-                        }
+                        ListWarn(e.LogMessage);
                     };
 
                     if (autoScan == true)
@@ -249,7 +225,7 @@ namespace cmrtd.Infrastructure.DeskoDevice
         public void Device_DocumentStatusChanged(object sender, DDADocumentStatusChangedEventArgs args)
         {
             try
-            {
+            {                
                 var status = _deviceManager.Device.DocumentStatus;
                 bool docPresent = status.HasFlag(DDADocumentStatusFlag.IsDocPresent);
                 bool hasFlipped = status.HasFlag(DDADocumentStatusFlag.IsDocFlipped);
@@ -622,6 +598,17 @@ namespace cmrtd.Infrastructure.DeskoDevice
 
                     var parser = new MRZParser();
                     MRZData data = parser.ParseTD3(ocrString);
+                    _helper.LogFile("=== Hasil Parsing MRZ ===");
+                    _helper.LogFile($"Document Code : {data.DocCode}");
+                    _helper.LogFile($"Issuing Country : {data.IssuingCountry}");
+                    _helper.LogFile($"Surname : {data.Surname}");
+                    _helper.LogFile($"Given Names : {data.GivenNames}");
+                    _helper.LogFile($"Passport Number : {data.PassportNumber}");
+                    _helper.LogFile($"Nationality : {data.Nationality}");
+                    _helper.LogFile($"Birth Date : {data.BirthDate}");
+                    _helper.LogFile($"Sex : {data.Sex}");
+                    _helper.LogFile($"Expiry Date : {data.ExpiryDate}");
+                    _helper.LogFile($"Personal Number : {data.PersonalNumber}");
 
                     _epassport.FaceBase64 = null;
                     _epassport.ImageFormat = null;
@@ -691,17 +678,12 @@ namespace cmrtd.Infrastructure.DeskoDevice
                             }
                             _deviceManager.Log($"[API] Semua task selesai dalam {sw.Elapsed.TotalSeconds:F2} detik");
 
-                            _helper.Cleaner
-                            (
-                                _lastScanResult.Data.MRZ,
-                                ocrString,
-                                _lastScanResult.Data.RgbImage.ImgBase64,
-                                _lastScanResult.Data.RgbImage.Location,
-                                faceBase64,
-                                _deviceSettings.Callback.Url,
-                                format,
-                                _lastScanResult.Data.RgbImage.FaceLocation
-                                );
+                            _fallbackPortraitBase64 = null;
+                            ocrString = null;
+                            faceBase64 = null;
+                            faceLocation = null;
+
+                            Thread.Sleep(300);
                         }
                         catch (Exception ex)
                         {
@@ -821,6 +803,69 @@ namespace cmrtd.Infrastructure.DeskoDevice
                 byte[] imageBytes = ms.ToArray();
                 return Convert.ToBase64String(imageBytes);
             }
+        }
+
+        private void ListWarn(string logMsg)
+        {
+            if (!logMsg.Contains("Ignoring unknown argument"))
+            {
+                if (logMsg.Contains("Too few boxes with contrast. Aborting."))
+                {
+                    CheckedNotAvailable(true, logMsg);
+                }
+                else if (logMsg.Contains("No document cropping found."))
+                {
+                    CheckedNotAvailable(true, logMsg);
+                }
+                else if (logMsg.Contains("No clipping found."))
+                {
+                    CheckedNotAvailable(true, logMsg);
+                }
+                else if (logMsg.Contains("Received empty image."))
+                {
+                    CheckedNotAvailable(true, logMsg);
+                }
+                else if (logMsg.Contains("_isUvDullMrz MRZ not available. Skipping UV dullness check."))
+                {
+                    CheckedNotAvailable(true, logMsg);
+                }
+                else if (logMsg.Contains("_isUvDullFace MRZ not available. Skipping UV dullness check."))
+                {
+                    CheckedNotAvailable(true, logMsg);
+                }
+                else if (logMsg.Contains("Cannot determine MRZ position."))
+                {
+                    CheckedNotAvailable(true, logMsg);
+                }
+                else
+                {
+                    _helper.LogFile(logMsg);
+                }
+            }
+        }
+
+        private void CheckedNotAvailable(bool truefalse, string LogMessage)
+        {
+            _epassport.LastError = truefalse;
+            _lastScanResult.Err_msg = LogMessage;
+            _helper.LogFile($"Error Debug Message : {LogMessage}");
+
+            var errorResponse = new Pasport.ScanApiResponse
+            {
+                Code = 408,
+                Valid = false,
+                Err_msg = LogMessage
+            };
+
+            // store pending error so future DoScanRequestAsync returns immediately
+            Interlocked.Exchange(ref _pendingErrorResponse, errorResponse);
+            Interlocked.Exchange(ref _pendingErrorTicks, DateTime.UtcNow.Ticks);
+
+            // if a scan is currently waiting, complete it now
+            _scanCompletionSource?.TrySetResult(errorResponse);
+
+            _epassport.LastError = false;
+            LastScanResult.Err_msg = "";
         }
 
     }

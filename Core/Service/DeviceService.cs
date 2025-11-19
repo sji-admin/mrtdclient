@@ -6,6 +6,8 @@ using Desko.EPass;
 using Desko.FullPage;
 using System.Diagnostics;
 using System.Diagnostics.Contracts;
+using System.Text.Json;
+using System.IO;
 
 namespace cmrtd.Core.Service
 {
@@ -21,8 +23,8 @@ namespace cmrtd.Core.Service
         //private readonly Epassport _epassport = new Epassport();
         private static readonly ManualResetEvent scanDoneEvent = new(false);
         private string _lastErrorMessage;
-        public Pasport.ScanApiResponse LastScanResult => _deviceHandler.LastScanResult;
-        public Pasport.ScanApiResponse LastScanResultCki => _devicePscan.LastScanResult;
+        public Pasport.ScanApiResponse LastScanResult => _deviceHandler?.LastScanResult;
+        public Pasport.ScanApiResponse LastScanResultCki => _devicePscan?.LastScanResult;
 
         #region penta 4x
         public DeviceService(IConfiguration config)
@@ -204,7 +206,7 @@ namespace cmrtd.Core.Service
                 throw new InvalidOperationException("Device handler is not initialized");
 
 
-            var totalTimeoutSeconds = 6;
+            var totalTimeoutSeconds = 8;
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(totalTimeoutSeconds));
 
             var scanTask = DoScanInternalAsync(cts.Token);
@@ -240,7 +242,7 @@ namespace cmrtd.Core.Service
                         break;
                     }
 
-                    if (sw.Elapsed.TotalSeconds > 5)
+                    if (sw.Elapsed.TotalSeconds > 10)
                     {
                         return new Pasport.ScanApiResponse
                         {
@@ -279,7 +281,32 @@ namespace cmrtd.Core.Service
                 }
 
                 var result = _deviceHandler.LastScanResult;
-                if (result == null)
+                if (result != null)
+                {
+                    //Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>> [SCAN] Scan completed. {result}");
+                    //Console.WriteLine($">>> [SCAN] Result Code={result.Code}, Valid={result.Valid}, Err='{result.Err_msg}'");
+                    //Console.WriteLine($">>> [SCAN] MRZ length={(result.Data?.MRZ?.Length ?? 0)}");
+                    //Console.WriteLine($">>> [SCAN] RGB image path='{result.Data?.RgbImage?.Location}'");
+                    //Console.WriteLine($">>> [SCAN] RGB ImgBase64 length={(result.Data?.RgbImage?.ImgBase64?.Length ?? 0)}");
+                    //Console.WriteLine($">>> [SCAN] Face ImgBase64 length={(result.Data?.RgbImage?.ImgFaceBase64?.Length ?? 0)}");
+
+                    // save full result to file
+                    try
+                    {
+                        var folder = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ScanResponses");
+                        Directory.CreateDirectory(folder);
+                        var options = new JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping, WriteIndented = true };
+                        string json = JsonSerializer.Serialize(result, options);
+                        var file = Path.Combine(folder, $"scan_response_{DateTime.UtcNow:yyyyMMdd_HHmmss}_{Guid.NewGuid():N}.json");
+                        await File.WriteAllTextAsync(file, json, System.Text.Encoding.UTF8);
+                        Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>> [SCAN] Saved full response to: {file}");
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [ERROR] >>> [SCAN] Failed to save response: {ex.Message}");
+                    }
+                } 
+                else
                 {
                     return new Pasport.ScanApiResponse
                     {
@@ -288,6 +315,7 @@ namespace cmrtd.Core.Service
                         Err_msg = "No scan result received."
                     };
                 }
+
 
                 Console.WriteLine($"[SCAN] Done in {sw.Elapsed.TotalSeconds:F1} seconds");
                 return result;

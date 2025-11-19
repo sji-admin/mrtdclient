@@ -787,6 +787,7 @@ namespace cmrtd.Infrastructure.DeskoDevice
                         _lastScanResult.Data.MRZ,
                         _ocrString,
                         _lastScanResult.Data.RgbImage.ImgBase64,
+                        _lastScanResult.Data.RgbImage.ImgFaceBase64,
                         _lastScanResult.Data.RgbImage.Location,
                         faceBase64,
                         _deviceSettings.Callback.Url,

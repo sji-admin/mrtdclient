@@ -21,7 +21,8 @@ namespace cmrtd
 
             builder.WebHost.ConfigureKestrel(options =>
             {
-                options.ListenAnyIP(port);
+                //options.ListenAnyIP(port);
+                options.ListenLocalhost(port);
             });
 
             builder.Services.AddEndpointsApiExplorer();

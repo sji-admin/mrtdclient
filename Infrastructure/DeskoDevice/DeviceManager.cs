@@ -28,8 +28,6 @@ namespace cmrtd.Infrastructure.DeskoDevice
             DDALib.DebugEvent += DDALib_DebugEvent;
             DDADeviceManager.DeviceListChangedEvent += DDADeviceManager_DeviceListChangedEvent;
         }
-        private static readonly object _logLock = new object();
-        private static readonly string _logFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "device_log.txt");
         public event EventHandler ConnectionChanged;
         public event EventHandler DeviceListChanged;
         public event DDALib.DebugHandler DebugEvent;
@@ -215,20 +213,9 @@ namespace cmrtd.Infrastructure.DeskoDevice
         }
         
         public void Log(string message)
-        {
-            //string logMessage = $">>> {DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} [INFO] >>> {message}";
-
-            Console.WriteLine($">>> {DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} [INFO] >>> {message}");
-            //// Tulis ke console
-            //Console.WriteLine(logMessage);
-
-            //// Tulis juga ke file
-            //lock (_logLock)
-            //{
-            //    File.AppendAllText(_logFilePath, logMessage + Environment.NewLine);
-            //}
+        {            
+            Console.WriteLine($">>> {DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} [INFO] >>> {message}");            
         }
-
         public void UnregiterDispose(bool dispose)
         {
             if (_device == null)

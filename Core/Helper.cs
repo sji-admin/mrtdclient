@@ -1,3 +1,4 @@
+using cmrtd.Core.Model;
 using Desko.DDA;
 using Desko.FullPage;
 using System.Drawing;
@@ -10,6 +11,9 @@ namespace cmrtd.Core
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]
     public class Helper
     {
+        private static readonly object _logLock = new object();
+        private static readonly string _logFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logDebug.txt");
+
         #region Helpers Penta4x
         public static Bitmap RawToBitmap(byte[] rawData, int width, int height)
         {
@@ -190,10 +194,40 @@ namespace cmrtd.Core
 
         #endregion
 
+        public void Cleaner(Pasport.ScanApiResponse scanResult, string fallbackPortraitBase64)
+        {
+            int before = scanResult?.Data?.RgbImage?.ImgFaceBase64?.Length ?? 0;
+            int befFallback = fallbackPortraitBase64?.Length ?? 0;
+            Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  PRE CleanUp Metadata : {before} chars");
+            Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  PRE CleanUp Face Fallback  : {befFallback} chars");
+
+            if (scanResult.Data != null)
+            {
+                Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  Dispose Metadata");
+                scanResult.Data.MRZ = string.Empty;
+                scanResult.Data.RgbImage.ImgBase64 = null;
+                scanResult.Data.RgbImage.ImgFaceBase64 = null;
+                scanResult.Data.RgbImage.Location = null;
+                scanResult.Data.RgbImage.FaceLocation = null;
+                scanResult.Data.IrImage.ImgBase64 = null;
+                scanResult.Data.UvImage.ImgBase64 = null;  
+                scanResult.Data.DocType = null;
+                fallbackPortraitBase64 = null;
+            }
+
+            int afterFallback = fallbackPortraitBase64?.Length ?? 0;
+            int after = scanResult?.Data?.RgbImage?.ImgFaceBase64?.Length ?? 0;
+            Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  POST CleanUp Metadata : {after} chars");
+            Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  POST CleanUp Face Fallback  : {afterFallback} chars");
+
+            //Thread.Sleep(300);
+        }
+
         public void Cleaner(
             string mrz,
             string ocrString,
-            string faceBase64,
+            string faceBase64Fallback,
+            string hasilfaceBase64,
             string ImgBase64,
             string Location,
             string Url,
@@ -201,11 +235,12 @@ namespace cmrtd.Core
             string FaceLocation
             )
         {
-            mrz = null;
+            mrz = "";
             ocrString = null;
-            faceBase64 = null;
             ImgBase64 = null;
+            faceBase64Fallback = null;
             Location = null;
+            hasilfaceBase64 = null;
             Url = null;
             format = null;
             FaceLocation = null;
@@ -213,5 +248,22 @@ namespace cmrtd.Core
             Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  CleanUp Data In Memory");
             Thread.Sleep(300);
         }
+
+        public void LogFile(string message)
+        {
+            string logMessage = $">>> {DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} [INFO] >>> {message}";
+
+            //Console.WriteLine($">>> {DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} [INFO] >>> {message}");
+            
+            // Tulis ke console
+            //Console.WriteLine(logMessage);
+
+            // Tulis juga ke file
+            lock (_logLock)
+            {
+                File.AppendAllText(_logFilePath, logMessage + Environment.NewLine);
+            }
+        }
+
     }
 }
