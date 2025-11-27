@@ -1,6 +1,7 @@
 using cmrtd.Core.Model;
 using Desko.DDA;
 using Desko.FullPage;
+using Serilog;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.Text;
@@ -198,12 +199,12 @@ namespace cmrtd.Core
         {
             int before = scanResult?.Data?.RgbImage?.ImgFaceBase64?.Length ?? 0;
             int befFallback = fallbackPortraitBase64?.Length ?? 0;
-            Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  PRE CleanUp Metadata : {before} chars");
+            Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  PRE CleanUp Metadata : {before} chars");
             Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  PRE CleanUp Face Fallback  : {befFallback} chars");
 
             if (scanResult.Data != null)
             {
-                Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  Dispose Metadata");
+                Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  Dispose Metadata");
                 scanResult.Data.MRZ = string.Empty;
                 scanResult.Data.RgbImage.ImgBase64 = null;
                 scanResult.Data.RgbImage.ImgFaceBase64 = null;
@@ -217,7 +218,7 @@ namespace cmrtd.Core
 
             int afterFallback = fallbackPortraitBase64?.Length ?? 0;
             int after = scanResult?.Data?.RgbImage?.ImgFaceBase64?.Length ?? 0;
-            Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  POST CleanUp Metadata : {after} chars");
+            Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  POST CleanUp Metadata : {after} chars");
             Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  POST CleanUp Face Fallback  : {afterFallback} chars");
 
             //Thread.Sleep(300);
@@ -247,22 +248,6 @@ namespace cmrtd.Core
 
             Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  CleanUp Data In Memory");
             Thread.Sleep(300);
-        }
-
-        public void LogFile(string message)
-        {
-            string logMessage = $">>> {DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} [INFO] >>> {message}";
-
-            //Console.WriteLine($">>> {DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} [INFO] >>> {message}");
-            
-            // Tulis ke console
-            //Console.WriteLine(logMessage);
-
-            // Tulis juga ke file
-            lock (_logLock)
-            {
-                File.AppendAllText(_logFilePath, logMessage + Environment.NewLine);
-            }
         }
 
     }

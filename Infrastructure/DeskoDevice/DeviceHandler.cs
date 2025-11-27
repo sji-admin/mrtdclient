@@ -3,6 +3,7 @@ using cmrtd.Core.Model;
 using cmrtd.Core.Service;
 using Desko.DDA;
 using Desko.EPass;
+using Serilog;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
@@ -70,11 +71,11 @@ namespace cmrtd.Infrastructure.DeskoDevice
                     var ticks = Interlocked.Exchange(ref _pendingErrorTicks, 0L);
                     if (ticks != 0 && (DateTime.UtcNow - new DateTime(ticks) < TimeSpan.FromSeconds(2)))
                     {
-                        _deviceManager.Log("[SCAN] Returning pending device error before starting scan (fresh).");
+                        Log.Information("[SCAN] Returning pending device error before starting scan (fresh).");
                         return pending;
                     }                    
                 }
-
+               
                 bool doCoax = false;
                 bool doOvd = false;
 
@@ -114,7 +115,7 @@ namespace cmrtd.Infrastructure.DeskoDevice
 
                 FeedbackStartScan();
                 _helper.Cleaner(_lastScanResult, _fallbackPortraitBase64);
-                _deviceManager.Log($"[SCAN] Scan in progress...");
+                Log.Information($"[SCAN] Scan in progress...");
 
                 using (cancellationToken.Register(() => _scanCompletionSource.TrySetCanceled()))
                 {
@@ -136,7 +137,7 @@ namespace cmrtd.Infrastructure.DeskoDevice
             }
             catch (OperationCanceledException)
             {
-                _deviceManager.Log("Scan canceled by token.");
+                Log.Information("Scan canceled by token.");
 
                 return new Pasport.ScanApiResponse
                 {
@@ -147,9 +148,9 @@ namespace cmrtd.Infrastructure.DeskoDevice
             }
             catch (Exception ex)
             {
-                Console.WriteLine("--- General Exception ---");
+                Log.Information("--- General Exception ---");
 
-                Console.WriteLine($"Message: {ex.Message}");
+                Log.Information($"Message: {ex.Message}");
                 
                 return new Pasport.ScanApiResponse
                 {
@@ -188,14 +189,14 @@ namespace cmrtd.Infrastructure.DeskoDevice
                     _deviceManager.Device.MsrEvent += Device_MsrEvent;                    
                     _deviceManager.Device.OcrEvent += Device_OcrEvent;
 
-                    
-                    _deviceManager.Log($"[SCAN] Register Event Handler Success");
+
+                    Log.Information($"[SCAN] Register Event Handler Success");
                 }
                 StartImageProcessingWorker();
             }
             catch (Exception ex)
             {
-                _deviceManager.Log($"Error: {ex.Message}");
+                Log.Information($"Error: {ex.Message}");
             }
         }
 
@@ -211,12 +212,12 @@ namespace cmrtd.Infrastructure.DeskoDevice
                     _deviceManager.Device.BarcodeEvent -= Device_BarcodeEvent;
                     _deviceManager.Device.MsrEvent -= Device_MsrEvent;
                     _deviceManager.Device.OcrEvent -= Device_OcrEvent;
-                    _deviceManager.Log("[SCAN] Unregister Event Handler Success");
+                    Log.Information("[SCAN] Unregister Event Handler Success");
                 }
             }
             catch (Exception ex)
             {
-                _deviceManager.Log($"Error: {ex.Message}");
+                Log.Information($"Error: {ex.Message}");
             }
         }
 
@@ -237,8 +238,8 @@ namespace cmrtd.Infrastructure.DeskoDevice
                     if (docPresent)
                     {
                         Thread.Sleep(500);
-                        _deviceManager.Log(" [DEVICE] Dokumen Masuk");
-                        _deviceManager.Log($" [DEVICE] Previous Error Scan : {_epassport.LastError}");
+                        Log.Information(" [DEVICE] Dokumen Masuk");
+                        Log.Information($" [DEVICE] Previous Error Scan : {_epassport.LastError}");
                         FeedbackDocPresent();
                         _ = DoScanRequestAsync();
                     }
@@ -252,7 +253,7 @@ namespace cmrtd.Infrastructure.DeskoDevice
 
         private void Device_ImageRequestDoneEvent(object sender, DDAImageRequestDoneEventArgs args)
         {
-            _deviceManager.Log(" [SCAN] Scan Complete");
+            Log.Information(" [SCAN] Scan Complete");
             FeedbackCompletedScan();                
         }
 
@@ -289,7 +290,7 @@ namespace cmrtd.Infrastructure.DeskoDevice
                 }
                 catch (Exception ex)
                 {
-                    _deviceManager.Log($"Error: {ex.Message}");
+                    Log.Information($"Error: {ex.Message}");
                 }
             });
             
@@ -305,7 +306,7 @@ namespace cmrtd.Infrastructure.DeskoDevice
                 _lastScanResult.Data.RgbImage.IsB900Ink = scanImage.IsB900Ink ?? false;
                 _lastScanResult.Data.IrImage.IsB900Ink = scanImage.IsB900Ink ?? false;
                 _lastScanResult.Data.UvImage.IsB900Ink = scanImage.IsB900Ink ?? false;
-                _deviceManager.Log(" [SCAN] IR: B900 Ink detected.");
+                Log.Information(" [SCAN] IR: B900 Ink detected.");
             }
 
             if (light == DDALightSource.Uv)
@@ -318,13 +319,13 @@ namespace cmrtd.Infrastructure.DeskoDevice
                     _lastScanResult.Data.UvImage.MotionBlur = scanImage.MotionBlur ?? false;                    
                     _lastScanResult.Data.RgbImage.MotionBlur = scanImage.MotionBlur ?? false;                    
                     _lastScanResult.Data.IrImage.MotionBlur = scanImage.MotionBlur ?? false;
-                    
-                    _deviceManager.Log(" [SCAN] UV dull detected.");
+
+                    Log.Information(" [SCAN] UV dull detected.");
                 }
 
-                if (scanImage.IsUvDullDocument == true) _deviceManager.Log(" [SCAN] UV dull on document.");                
-                if (scanImage.IsUvDullMrz == true) _deviceManager.Log(" [SCAN] UV dull on MRZ.");                
-                if (scanImage.IsUvDullFace == true) _deviceManager.Log(" [SCAN] UV dull on face.");
+                if (scanImage.IsUvDullDocument == true) Log.Information(" [SCAN] UV dull on document.");                
+                if (scanImage.IsUvDullMrz == true) Log.Information(" [SCAN] UV dull on MRZ.");                
+                if (scanImage.IsUvDullFace == true) Log.Information(" [SCAN] UV dull on face.");
             }
 
             using (Image img = Helper.CreateImageFromScanImage(scanImage))
@@ -337,11 +338,11 @@ namespace cmrtd.Infrastructure.DeskoDevice
                 {
                     if (light == DDALightSource.White && scanImage.Portrait.Width > 0 && scanImage.Portrait.Height > 0)
                     {
-                        _deviceManager.Log(" [SCAN] Data Page Masuk");
+                        Log.Information(" [SCAN] Data Page Masuk");
 
-                        _deviceManager.Log($" [SCAN] Image dimensions = left: {scanImage.Portrait.Left}, Top: {scanImage.Portrait.Top} px");
+                        Log.Information($" [SCAN] Image dimensions = left: {scanImage.Portrait.Left}, Top: {scanImage.Portrait.Top} px");
 
-                        _deviceManager.Log($" [SCAN] Image dimensions = Width: {scanImage.Portrait.Width}, Height: {scanImage.Portrait.Height} px");
+                        Log.Information($" [SCAN] Image dimensions = Width: {scanImage.Portrait.Width}, Height: {scanImage.Portrait.Height} px");
 
                         _lastScanResult.Data.RgbImage.ImgBase64 = ConvertBitmapToBase64(bmp, ImageFormat.Jpeg);
 
@@ -353,7 +354,7 @@ namespace cmrtd.Infrastructure.DeskoDevice
                         string patheWhite = GetUniqueFilePath(folder, $"full_{light}_{DateTime.Now:yyyyMMdd_HHmmss}", ".jpeg");
                         bmp.Save(patheWhite, ImageFormat.Jpeg);
 
-                        _deviceManager.Log($" [SCAN] WHITE Full Image saved to: {patheWhite}");
+                        Log.Information($" [SCAN] WHITE Full Image saved to: {patheWhite}");
                         _lastScanResult.Data.RgbImage.Location = patheWhite;
 
                         using (Bitmap portrait = bmp.Clone(scanImage.Portrait, bmp.PixelFormat))
@@ -371,7 +372,7 @@ namespace cmrtd.Infrastructure.DeskoDevice
 
                             portrait.Save(path, ImageFormat.Jpeg);
 
-                            _deviceManager.Log($" [SCAN] Image Portrait saved to: {path}");
+                            Log.Information($" [SCAN] Image Portrait saved to: {path}");
                             _faceLocation = path;
 
                             if (_lastScanResult.Data.RgbImage.Face == null)
@@ -392,14 +393,14 @@ namespace cmrtd.Infrastructure.DeskoDevice
                 }
                 catch (Exception ex)
                 {
-                    _deviceManager.Log($"Error processing White rotation: {ex.Message}");
+                    Log.Information($"Error processing White rotation: {ex.Message}");
                 }
 
                 try
                 {
                     if (light == DDALightSource.Ir)
                     {
-                        _deviceManager.Log(" [SCAN] IR Data Page Masuk");
+                        Log.Information(" [SCAN] IR Data Page Masuk");
 
                         if (_lastScanResult.Data.IrImage == null)
                             _lastScanResult.Data.IrImage = new Pasport.ImageResult();
@@ -410,7 +411,7 @@ namespace cmrtd.Infrastructure.DeskoDevice
                         // Simpan full IR image
                         string pathIr = GetUniqueFilePath(folder, $"full_{light}_{DateTime.Now:yyyyMMdd_HHmmss}", ".jpeg");
                         bmp.Save(pathIr, ImageFormat.Jpeg);
-                        _deviceManager.Log($" [SCAN] IR Full Image saved to: {pathIr}");
+                        Log.Information($" [SCAN] IR Full Image saved to: {pathIr}");
 
                         _lastScanResult.Data.IrImage.Location = pathIr;
                         _lastScanResult.Data.IrImage.ImgBase64 = ConvertBitmapToBase64(bmp, ImageFormat.Jpeg);
@@ -432,11 +433,11 @@ namespace cmrtd.Infrastructure.DeskoDevice
                                     _lastScanResult.Data.RgbImage.Face.Height
                                 );
 
-                                _deviceManager.Log(" [SCAN] IR Portrait fallback to RGB face area.");
+                                Log.Information(" [SCAN] IR Portrait fallback to RGB face area.");
                             }
                             else
                             {
-                                _deviceManager.Log(" [SCAN] IR Portrait not found (no fallback available).");
+                                Log.Information(" [SCAN] IR Portrait not found (no fallback available).");
                                 return;
                             }
                         }
@@ -460,21 +461,21 @@ namespace cmrtd.Infrastructure.DeskoDevice
                             _lastScanResult.Data.IrImage.Face.Left = portraitRect.Left;
                             _lastScanResult.Data.IrImage.Face.Top = portraitRect.Top;
 
-                            _deviceManager.Log($" [SCAN] IR Portrait saved to: {pathPortrait}");
+                            Log.Information($" [SCAN] IR Portrait saved to: {pathPortrait}");
                         }
                     }
 
                 }
                 catch (Exception ex)
                 {
-                    _deviceManager.Log($"Error processing IR image: {ex.Message}");
+                    Log.Information($"Error processing IR image: {ex.Message}");
                 }
 
                 try
                 {
                     if (light == DDALightSource.Uv)
                     {
-                        _deviceManager.Log(" [SCAN] UV Data Page Masuk");
+                        Log.Information(" [SCAN] UV Data Page Masuk");
 
                         if (_lastScanResult.Data.UvImage == null)
                             _lastScanResult.Data.UvImage = new Pasport.ImageResult();
@@ -507,11 +508,11 @@ namespace cmrtd.Infrastructure.DeskoDevice
                                     _lastScanResult.Data.RgbImage.Face.Height
                                 );
 
-                                _deviceManager.Log(" [SCAN] UV Portrait fallback ke RGB face area.");
+                                Log.Information(" [SCAN] UV Portrait fallback ke RGB face area.");
                             }
                             else
                             {
-                                _deviceManager.Log(" [SCAN] UV Portrait tidak ditemukan (no fallback).");
+                                Log.Information(" [SCAN] UV Portrait tidak ditemukan (no fallback).");
                                 return;
                             }
                         }
@@ -533,14 +534,14 @@ namespace cmrtd.Infrastructure.DeskoDevice
                             _lastScanResult.Data.UvImage.Face.Left = portraitRect.Left;
                             _lastScanResult.Data.UvImage.Face.Top = portraitRect.Top;
 
-                            _deviceManager.Log($" [SCAN] UV Portrait saved to: {pathPortrait}");
+                            Log.Information($" [SCAN] UV Portrait saved to: {pathPortrait}");
                         }
                     }
 
                 }
                 catch (Exception ex)
                 {
-                    _deviceManager.Log($"Error processing UV image: {ex.Message}");
+                    Log.Information($"Error processing UV image: {ex.Message}");
                 }
             }
 
@@ -552,9 +553,9 @@ namespace cmrtd.Infrastructure.DeskoDevice
             if (args.Content is { Length: > 0 })
             {
                 string bcrString = Helper.GetHexDump(args.Content, 4, 2);
-                _deviceManager.Log($">>> BCR : {bcrString}");
+                Log.Information($">>> BCR : {bcrString}");
             }
-            _deviceManager.Log(" Barcode inserted " + args.Content.Length + " Bytes");
+            Log.Information(" Barcode inserted " + args.Content.Length + " Bytes");
         }
 
         private void Device_MsrEvent(object sender, DDAMsrEventArgs args)
@@ -562,20 +563,20 @@ namespace cmrtd.Infrastructure.DeskoDevice
             if (args.Content is { Length: > 0 })
             {
                 string mcrString = Helper.GetHexDump(args.Content, 4, 1);
-                _deviceManager.Log($">>> Msr : {mcrString}");
+                Log.Information($">>> Msr : {mcrString}");
 
                 // Convert byte[] ke string
                 string ocrString = Encoding.ASCII.GetString(args.Content);
                 ocrString = ocrString.Replace("\r", Environment.NewLine);
 
-                _deviceManager.Log($">>> MSR : {ocrString}");
+                Log.Information($">>> MSR : {ocrString}");
 
             }
 
-            _deviceManager.Log("--- Msr inserted ---");
-            _deviceManager.Log("--- Index:     " + args.Index);
-            _deviceManager.Log("--- Size:      " + args.Content.Length + " Bytes");
-            _deviceManager.Log("--- Timestamp: " + args.Timestamp);
+            Log.Information("--- Msr inserted ---");
+            Log.Information("--- Index:     " + args.Index);
+            Log.Information("--- Size:      " + args.Content.Length + " Bytes");
+            Log.Information("--- Timestamp: " + args.Timestamp);
 
         }
 
@@ -589,26 +590,26 @@ namespace cmrtd.Infrastructure.DeskoDevice
                 {
                     var uepass = new UePass();
                     var pasport = new Pasport();
-                    _deviceManager.Log("[SCAN] Ocr inserted Size: " + args.Content.Length + " Bytes");
+                    Log.Information("[SCAN] Ocr inserted Size: " + args.Content.Length + " Bytes");
                     string ocrString = Encoding.ASCII.GetString(args.Content);
                     ocrString = Regex.Replace(ocrString, @"\r\n?|\n", "");                    
-                    _deviceManager.Log($"[SCAN] MRZ : {ocrString}");
+                    Log.Information($"[SCAN] MRZ : {ocrString}");
                     _lastOcrString = ocrString;
                     _lastScanResult.Data.MRZ = ocrString;
 
                     var parser = new MRZParser();
                     MRZData data = parser.ParseTD3(ocrString);
-                    _helper.LogFile("=== Hasil Parsing MRZ ===");
-                    _helper.LogFile($"Document Code : {data.DocCode}");
-                    _helper.LogFile($"Issuing Country : {data.IssuingCountry}");
-                    _helper.LogFile($"Surname : {data.Surname}");
-                    _helper.LogFile($"Given Names : {data.GivenNames}");
-                    _helper.LogFile($"Passport Number : {data.PassportNumber}");
-                    _helper.LogFile($"Nationality : {data.Nationality}");
-                    _helper.LogFile($"Birth Date : {data.BirthDate}");
-                    _helper.LogFile($"Sex : {data.Sex}");
-                    _helper.LogFile($"Expiry Date : {data.ExpiryDate}");
-                    _helper.LogFile($"Personal Number : {data.PersonalNumber}");
+                    Log.Information("=== Hasil Parsing MRZ ===");
+                    Log.Information($"Document Code : {data.DocCode}");
+                    Log.Information($"Issuing Country : {data.IssuingCountry}");
+                    Log.Information($"Surname : {data.Surname}");
+                    Log.Information($"Given Names : {data.GivenNames}");
+                    Log.Information($"Passport Number : {data.PassportNumber}");
+                    Log.Information($"Nationality : {data.Nationality}");
+                    Log.Information($"Birth Date : {data.BirthDate}");
+                    Log.Information($"Sex : {data.Sex}");
+                    Log.Information($"Expiry Date : {data.ExpiryDate}");
+                    Log.Information($"Personal Number : {data.PersonalNumber}");
 
                     _epassport.FaceBase64 = null;
                     _epassport.ImageFormat = null;
@@ -619,7 +620,7 @@ namespace cmrtd.Infrastructure.DeskoDevice
                         try
                         {
                             uepass.ReadPassportPentaData(ocrString, _epassport);
-                            Console.WriteLine($"[UEPASS] Waktu baca chip: {sw.Elapsed.TotalSeconds:F2} detik");
+                            Log.Information($"[UEPASS] Waktu baca chip: {sw.Elapsed.TotalSeconds:F2} detik");
                             sw.Restart();
                             // cek hasil
                             string faceBase64 = null;
@@ -628,17 +629,17 @@ namespace cmrtd.Infrastructure.DeskoDevice
                             {
                                 faceBase64 = _epassport.FaceBase64;
                                 _lastScanResult.Data.DocType = "chip";
-                                _deviceManager.Log($"[BASE64] Use FaceBase64 From chip ({faceBase64.Length} chars)");
+                                Log.Information($"[BASE64] Use FaceBase64 From chip ({faceBase64.Length} chars)");
                             }
                             else if (!string.IsNullOrEmpty(_fallbackPortraitBase64))
                             {
                                 faceBase64 = _fallbackPortraitBase64;
                                 _lastScanResult.Data.DocType = "document";
-                                _deviceManager.Log($"[BASE64] Use fallback portrait ({faceBase64.Length} chars)");
+                                Log.Information($"[BASE64] Use fallback portrait ({faceBase64.Length} chars)");
                             }
                             else
                             {
-                                _deviceManager.Log("[BASE64] Tidak ada image yang bisa dikirim");
+                                Log.Information("[BASE64] Tidak ada image yang bisa dikirim");
                                 //return;
                             }
 
@@ -648,7 +649,7 @@ namespace cmrtd.Infrastructure.DeskoDevice
 
                             if (_deviceSettings.SensepassKai.Enabled)
                             {
-                                _deviceManager.Log($" [BASE64] faceBase64 hasil Length: {faceBase64.Length} characters");
+                                Log.Information($" [BASE64] faceBase64 hasil Length: {faceBase64.Length} characters");
                                 
                                 await _apiService.AddMemberToGroupAsync(
                                     data.PassportNumber,
@@ -676,7 +677,7 @@ namespace cmrtd.Infrastructure.DeskoDevice
                                     _lastScanResult.Err_msg
                                     );
                             }
-                            _deviceManager.Log($"[API] Semua task selesai dalam {sw.Elapsed.TotalSeconds:F2} detik");
+                            Log.Information($"[API] Semua task selesai dalam {sw.Elapsed.TotalSeconds:F2} detik");
 
                             _fallbackPortraitBase64 = null;
                             ocrString = null;
@@ -696,7 +697,7 @@ namespace cmrtd.Infrastructure.DeskoDevice
             }
             catch (Exception ex)
             {
-                _deviceManager.Log($"Error: {ex.Message}");
+                Log.Information($"Error: {ex.Message}");
             }
         }
 
@@ -839,7 +840,7 @@ namespace cmrtd.Infrastructure.DeskoDevice
                 }
                 else
                 {
-                    _helper.LogFile(logMsg);
+                    Log.Information(logMsg);
                 }
             }
         }
@@ -848,7 +849,7 @@ namespace cmrtd.Infrastructure.DeskoDevice
         {
             _epassport.LastError = truefalse;
             _lastScanResult.Err_msg = LogMessage;
-            _helper.LogFile($"Error Debug Message : {LogMessage}");
+            Log.Information($"Error Debug Message : {LogMessage}");
 
             var errorResponse = new Pasport.ScanApiResponse
             {

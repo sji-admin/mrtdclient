@@ -1,5 +1,6 @@
 ﻿using cmrtd.Core.Model;
 using cmrtd.Infrastructure.DeskoDevice;
+using Serilog;
 using System.Text;
 using System.Text.Json;
 
@@ -110,13 +111,13 @@ namespace cmrtd.Core.Service
                 var response = await client.PostAsync(url, content);
                 var result = await response.Content.ReadAsStringAsync();
 
-                Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>> [CALLBACK] Status: {response.StatusCode}");
-                Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>> [CALLBACK] Response: {result}");
-                Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>> [API] Done Callback");
+                Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>> [CALLBACK] Status: {response.StatusCode}");
+                Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>> [CALLBACK] Response: {result}");
+                Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>> [API] Done Callback");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($">>> [CALLBACK] Error: {ex.Message}");
+                Log.Information($">>> [CALLBACK] Error: {ex.Message}");
             }
         }
 

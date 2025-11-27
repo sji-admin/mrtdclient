@@ -2,6 +2,7 @@
 using Desko.ePass;
 using Desko.EPass;
 using Microsoft.AspNetCore.DataProtection.KeyManagement;
+using Serilog;
 using System.Text;
 using static System.Net.Mime.MediaTypeNames;
 
@@ -44,7 +45,7 @@ namespace cmrtd.Infrastructure.DeskoDevice
 
         public void ReadPassportPentaData(string mrz, Epassport epass)
         {
-            Console.WriteLine("Read passport full");
+            Log.Information("Read passport full");
 
             string key = mrz;
 
@@ -53,11 +54,11 @@ namespace cmrtd.Infrastructure.DeskoDevice
                 proc.DoAuthentications = AuthenticationType.BAC | AuthenticationType.BAP | AuthenticationType.PACE | AuthenticationType.AutoAppSelection;
                 proc.ReadMRTDFiles = MRTDFileFlag.DG01 | MRTDFileFlag.DG02;
 
-                PrintLine("Perform...");
+                Log.Information("Perform...");
 
                 bool result = proc.Perform(PerformScenario.MRTD_DL, PerformOptionType.ImgConversion, key);
 
-                Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [CHIP] Chip {result}.");
+                Log.Information($"  [CHIP] Chip {result}.");
 
                 HandleMRTDResult(result, proc, epass);
             }
@@ -67,7 +68,7 @@ namespace cmrtd.Infrastructure.DeskoDevice
         {
             try 
             {
-                Console.WriteLine("Read passport full");
+                Log.Information("Read passport full");
 
                 string key = mrz;
 
@@ -76,18 +77,18 @@ namespace cmrtd.Infrastructure.DeskoDevice
                     proc.DoAuthentications = AuthenticationType.BAC | AuthenticationType.BAP | AuthenticationType.PACE | AuthenticationType.AutoAppSelection;
                     proc.ReadMRTDFiles = MRTDFileFlag.DG01 | MRTDFileFlag.DG02;
 
-                    PrintLine("Perform...");
+                    Log.Information("Perform...");
 
                     bool result = proc.Perform(PerformScenario.MRTD_DL, PerformOptionType.ImgConversion, key);
 
-                    Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [CHIP] Chip {result}.");
+                    Log.Information($"  [CHIP] Chip {result}.");
 
                     HandleMRTDResult(result, proc, epass);
                 }
             } 
             catch (Exception ex)
             {              
-                Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [ERROR] >>> {ex.Message}");
+                Log.Information($" [ERROR] >>> {ex.Message}");
             }
             
         }
@@ -254,7 +255,7 @@ namespace cmrtd.Infrastructure.DeskoDevice
                         faceimg = bioFace;
                         if (faceimg != null)
                         {
-                            PrintLine("BiometricFace image has width=", faceimg.Width, " and height=", faceimg.Height);
+                            Log.Information($"BiometricFace image has width= {faceimg.Width} and height= {faceimg.Height}");
 
                             using var ms = new MemoryStream(64 * 1024); // preallocate buffer (lebih efisien)
                             faceimg.Save(ms, System.Drawing.Imaging.ImageFormat.Jpeg);
@@ -275,27 +276,27 @@ namespace cmrtd.Infrastructure.DeskoDevice
                                 try
                                 {
                                     File.Delete(filePath);
-                                    PrintLine("Existing face.jpeg deleted.");
+                                    Log.Information("Existing face.jpeg deleted.");
                                 }
                                 catch (Exception ex)
                                 {
-                                    PrintLine("Failed to delete existing face.jpeg: ", ex.Message);
+                                    Log.Information($"Failed to delete existing face.jpeg: {ex.Message}");
                                 }
                             }
 
                             faceimg.Save(filePath, System.Drawing.Imaging.ImageFormat.Jpeg);
 
-                            PrintLine("Face image saved to: ", filePath);
+                            Log.Information($"Face image saved to: {filePath}");
                         }
                         else
                         {
-                            PrintLine("BiometricFace image is null");
+                            Log.Information("BiometricFace image is null");
                             //return;
                         }
                     }
                     catch (Exception ex)
                     {
-                        PrintLine("Error processing BiometricFace image: ", ex.Message);
+                        Log.Information($"Error processing BiometricFace image: {ex.Message}");
                     }
                     finally
                     {
@@ -304,22 +305,22 @@ namespace cmrtd.Infrastructure.DeskoDevice
                 }
                 else
                 {
-                    PrintLine("No BiometricFace image found");
+                    Log.Information("No BiometricFace image found");
                 }
 
                 // Info tambahan
                 string usedKey = proc.UsedKey;
                 if (!string.IsNullOrEmpty(usedKey))
-                    PrintLine("UsedKey: ", usedKey);
+                    Log.Information($"UsedKey: {usedKey}");
 
                 string mrz = proc.MRZ;
                 if (!string.IsNullOrEmpty(mrz))
-                    PrintLine("MRZ on Chip: ", mrz);
+                    Log.Information($"MRZ on Chip: {mrz}");
 
                 if (proc.BiometricFaceImgConverted != null)
-                    PrintLine("BiometricFaceImgConverted has ", proc.BiometricFaceImgConverted.Length, " bytes");
+                    Log.Information($"BiometricFaceImgConverted has {proc.BiometricFaceImgConverted.Length} bytes");
 
-                PrintLine("----------------------------------------------------");
+                Log.Information("----------------------------------------------------");
             }
             else
             {

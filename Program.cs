@@ -1,9 +1,11 @@
 using cmrtd.Core.Model;
 using cmrtd.Core.Service;
 using cmrtd.Infrastructure.DeskoDevice;
+using cmrtd.Infrastructure.ThalesDevice;
 using Desko.DDA;
 using Desko.ePass;
 using Desko.EPass.Types;
+using Serilog;
 using System;
 using System.Reflection;
 using System.Text;
@@ -15,7 +17,25 @@ namespace cmrtd
         [System.Runtime.Versioning.SupportedOSPlatform("windows")]
         public static void Main(string[] args)
         {
+            Log.Logger = new LoggerConfiguration()
+                .MinimumLevel.Debug()
+                .WriteTo.Console()
+                .WriteTo.File(
+                    "Logs/app-.log",
+                    rollingInterval: RollingInterval.Day,
+                    fileSizeLimitBytes: 1_000_000_000,  
+                    rollOnFileSizeLimit: true,          
+                    retainedFileCountLimit: 30,         
+                    shared: true
+                )
+                .CreateLogger();
+
+            Log.Information("Starting cmrtd service...");
+
             var builder = WebApplication.CreateBuilder(args);
+
+            // Override default logging
+            builder.Host.UseSerilog();
 
             var port = builder.Configuration.GetValue<int>("Kestrel:Port");
 
@@ -26,7 +46,7 @@ namespace cmrtd
             });
 
             builder.Services.AddEndpointsApiExplorer();
-            builder.Services.AddSingleton<DeviceService>(); 
+            builder.Services.AddSingleton<DeviceService>();            
 
             var app = builder.Build();
 
@@ -280,12 +300,16 @@ namespace cmrtd
             deviceSvc.Start();
             deviceSvc.startCki();
 
+            //ThalesDevicesManager _device = new ThalesDevicesManager();
+            //_device.InitialiseReader();
+
             app.Lifetime.ApplicationStopping.Register(() =>
             {
                 deviceSvc.Dispose();
                 Api.Terminate();
                 DDALib.Terminate();
                 deviceSvc.StopCki();
+                //_device.Terminet();
             });
 
             app.Run();
