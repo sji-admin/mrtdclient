@@ -4,10 +4,11 @@ using Desko.DDA;
 using Desko.ePass;
 using Desko.EPass;
 using Desko.FullPage;
+using Serilog;
 using System.Diagnostics;
 using System.Diagnostics.Contracts;
-using System.Text.Json;
 using System.IO;
+using System.Text.Json;
 
 namespace cmrtd.Core.Service
 {
@@ -48,10 +49,10 @@ namespace cmrtd.Core.Service
             _deviceManager = new DeviceManager();
 
             _deviceManager.ConnectionChanged += (s, e) =>
-                    Console.WriteLine($"{DateTime.Now:HH:mm:ss.fff} [INFO] >>> [DEVICE] Connection Changed");
+                    Log.Information($"{DateTime.Now:HH:mm:ss.fff} [INFO] >>> [DEVICE] Connection Changed");
 
             _deviceManager.DeviceListChanged += (s, e) =>
-                Console.WriteLine($"{DateTime.Now:HH:mm:ss.fff} [INFO] >>> [DEVICE] Device List Changed");
+                Log.Information($"{DateTime.Now:HH:mm:ss.fff} [INFO] >>> [DEVICE] Device List Changed");
 
             _deviceManager.DebugEvent += (s, e) =>
             {
@@ -66,13 +67,13 @@ namespace cmrtd.Core.Service
                 else if (e.LogMessage.Contains("Device cannot be connected"))
                 {
                     _lastErrorMessage = e.LogMessage;
-                    Console.WriteLine($">>> [DEVICE] cannot be connected: {e.LogMessage}");
+                    Log.Information($">>> [DEVICE] cannot be connected: {e.LogMessage}");
                 }
                 else if (e.LogMessage.Contains("DIMIS entry added for device id"))
                 {
                     if (_deviceManager.IsConnected)
                     {
-                        Console.WriteLine($">>> [DEVICE] Device Already Connected");
+                        Log.Information($">>> [DEVICE] Device Already Connected");
                     }
                     else
                     {
@@ -85,7 +86,7 @@ namespace cmrtd.Core.Service
 
                                 if (_deviceManager != null && _deviceManager.IsConnected)
                                 {
-                                    Console.WriteLine($">>> [DEVICE] Auto-connected successfully.");
+                                    Log.Information($">>> [DEVICE] Auto-connected successfully.");
                                     bool docPresentLastTime = false;
                                     var status = _deviceManager.Device.DocumentStatus;
                                     bool docPresent = status.HasFlag(DDADocumentStatusFlag.IsDocPresent);
@@ -97,7 +98,7 @@ namespace cmrtd.Core.Service
                                         docPresentLastTime = docPresent;
                                         if (docPresent)
                                         {
-                                            _deviceManager.Log(" [DEVICE] Dokumen Masuk");
+                                            Log.Information(" [DEVICE] Dokumen Masuk");
                                             _ = _deviceHandler.DoScanRequestAsync();
                                         }
                                     }
@@ -105,12 +106,12 @@ namespace cmrtd.Core.Service
                                 }
                                 else
                                 {
-                                    Console.WriteLine($">>> [DEVICE] Auto-connect failed (device not ready).");
+                                    Log.Information($">>> [DEVICE] Auto-connect failed (device not ready).");
                                 }
                             }
                             catch (Exception ex)
                             {
-                                Console.WriteLine($">>> [DEVICE] Auto-connect exception: {ex.Message}");
+                                Log.Information($">>> [DEVICE] Auto-connect exception: {ex.Message}");
                             }
                         });
                     }
@@ -118,18 +119,18 @@ namespace cmrtd.Core.Service
                 else
                 {
                     // TODO : normal log
-                    Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>> [DEVICE] {e.LogMessage}");
+                    Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>> [DEVICE] {e.LogMessage}");
                 }
             };
                     
             try
             {
-                Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>> [DEVICE] Connecting...");
+                Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>> [DEVICE] Connecting...");
                 _deviceManager.Connect($"{_deviceSettings.Type}\\*");
 
                 if (_deviceManager.IsConnected)
                 {
-                    Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>> [DEVICE] Connected!");
+                    Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>> [DEVICE] Connected!");
 
                     var buzzer = _deviceManager.GetBuzzer(0);
                     buzzer.HighTime = 200;
@@ -164,25 +165,25 @@ namespace cmrtd.Core.Service
                         docPresentLastTime = docPresent;
                         if (docPresent)
                         {
-                            _deviceManager.Log(" [DEVICE] Dokumen Masuk");
+                            Log.Information(" [DEVICE] Dokumen Masuk");
                             _ = _deviceHandler.DoScanRequestAsync();
                         }
                     }
                 }
                 else
                 {
-                    _deviceManager.Log("[DEVICE] Device Not Connected");
+                    Log.Information("[DEVICE] Device Not Connected");
                     _deviceManager.Dispose();
                 }
             }
             catch (DDAException ex)
             {
-                Console.WriteLine($"[ERROR] Device connection failed: {ex.Message}");
+                Log.Information($"[ERROR] Device connection failed: {ex.Message}");
                 _deviceManager.Disconnect(true);
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[ERROR] Device connection unexpected error: {ex.Message}");
+                Log.Information($"[ERROR] Device connection unexpected error: {ex.Message}");
                 _deviceManager?.Disconnect(true);
             }
         }
@@ -206,7 +207,7 @@ namespace cmrtd.Core.Service
                 throw new InvalidOperationException("Device handler is not initialized");
 
 
-            var totalTimeoutSeconds = 8;
+            var totalTimeoutSeconds = 21;
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(totalTimeoutSeconds));
 
             var scanTask = DoScanInternalAsync(cts.Token);
@@ -229,7 +230,7 @@ namespace cmrtd.Core.Service
             try
             {
 
-                Console.WriteLine("[SCAN] Waiting for document to be inserted...");
+                Log.Information("[SCAN] Waiting for document to be inserted...");
 
                 var sw = Stopwatch.StartNew();
                 while (true)
@@ -238,11 +239,11 @@ namespace cmrtd.Core.Service
                     var status = _deviceManager.Device.DocumentStatus;
                     if (status.HasFlag(DDADocumentStatusFlag.IsDocPresent))
                     {
-                        Console.WriteLine($">>> [DEVICE] DokumenT Present after {sw.Elapsed.TotalSeconds:F1} seconds");
+                        Log.Information($">>> [DEVICE] DokumenT Present after {sw.Elapsed.TotalSeconds:F1} seconds");
                         break;
                     }
 
-                    if (sw.Elapsed.TotalSeconds > 10)
+                    if (sw.Elapsed.TotalSeconds > 15)
                     {
                         return new Pasport.ScanApiResponse
                         {
@@ -257,7 +258,7 @@ namespace cmrtd.Core.Service
 
                 scanDoneEvent.Reset();
 
-                Console.WriteLine("[SCAN] Starting manual scan...");
+                Log.Information("[SCAN] Starting manual scan...");
                 var scanResponse = await _deviceHandler.DoScanRequestAsync(token);
 
                 if (scanResponse != null && !scanResponse.Valid)
@@ -299,11 +300,11 @@ namespace cmrtd.Core.Service
                         string json = JsonSerializer.Serialize(result, options);
                         var file = Path.Combine(folder, $"scan_response_{DateTime.UtcNow:yyyyMMdd_HHmmss}_{Guid.NewGuid():N}.json");
                         await File.WriteAllTextAsync(file, json, System.Text.Encoding.UTF8);
-                        Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>> [SCAN] Saved full response to: {file}");
+                        Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>> [SCAN] Saved full response to: {file}");
                     }
                     catch (Exception ex)
                     {
-                        Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [ERROR] >>> [SCAN] Failed to save response: {ex.Message}");
+                        Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [ERROR] >>> [SCAN] Failed to save response: {ex.Message}");
                     }
                 } 
                 else
@@ -317,7 +318,7 @@ namespace cmrtd.Core.Service
                 }
 
 
-                Console.WriteLine($"[SCAN] Done in {sw.Elapsed.TotalSeconds:F1} seconds");
+                Log.Information($"[SCAN] Done in {sw.Elapsed.TotalSeconds:F1} seconds");
                 return result;
             }
             finally
@@ -351,7 +352,7 @@ namespace cmrtd.Core.Service
             }
             catch (Exception ex)
             {
-                _deviceManager?.Log($"[ERROR] Device reconnect failed: {ex.Message}");
+                Log.Information($"[ERROR] Device reconnect failed: {ex.Message}");
                 return _lastErrorMessage ?? ex.Message;
             }
         }
@@ -414,7 +415,7 @@ namespace cmrtd.Core.Service
             }
             else
             {
-                Console.WriteLine("[WARN] _deviceManager atau Serial4x belum siap atau null");
+                Log.Information("[WARN] _deviceManager atau Serial4x belum siap atau null");
             }
 
             if (_devicePscan?.Epassport?.SerialCki != null)
@@ -424,7 +425,7 @@ namespace cmrtd.Core.Service
             }
             else
             {
-                Console.WriteLine("[WARN] _devicePscan atau SerialCki belum siap atau null");
+                Log.Information("[WARN] _devicePscan atau SerialCki belum siap atau null");
             }
 
             return list;
@@ -439,11 +440,11 @@ namespace cmrtd.Core.Service
 
             try { 
                 _devicePscan.ConnectDevice();
-                Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>> [DEVICE] Connecting...");
+                Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>> [DEVICE] Connecting...");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[ERROR] Device connection failed: {ex.Message}");
+                Log.Information($"[ERROR] Device connection failed: {ex.Message}");
             }
         }
 
@@ -462,7 +463,7 @@ namespace cmrtd.Core.Service
             //await _scanLock.WaitAsync();
             try
             {
-                Console.WriteLine("[SCAN] Waiting for document to be inserted...");
+                Log.Information("[SCAN] Waiting for document to be inserted...");
 
                 var sw = Stopwatch.StartNew();
                 while (true)
@@ -470,7 +471,7 @@ namespace cmrtd.Core.Service
                     var status = Desko.FullPage.Api.IsDocumentPresent();
                     if (status == true)
                     {
-                        Console.WriteLine($">>> [DEVICE] DokumenT Present after {sw.Elapsed.TotalSeconds:F1} seconds");
+                        Log.Information($">>> [DEVICE] DokumenT Present after {sw.Elapsed.TotalSeconds:F1} seconds");
                         break;
                     }
 
@@ -487,7 +488,7 @@ namespace cmrtd.Core.Service
                     await Task.Delay(200);
                 }
 
-                Console.WriteLine("[SCAN] Starting manual scan Cki...");
+                Log.Information("[SCAN] Starting manual scan Cki...");
                 await _devicePscan.ScanAsync();
                 sw.Stop();
 
@@ -502,7 +503,7 @@ namespace cmrtd.Core.Service
                     };
                 }
 
-                Console.WriteLine($"[SCAN] Done in {sw.Elapsed.TotalSeconds:F1} seconds");
+                Log.Information($"[SCAN] Done in {sw.Elapsed.TotalSeconds:F1} seconds");
                 return result;
             }
             finally
@@ -513,7 +514,7 @@ namespace cmrtd.Core.Service
 
         public void StopCki()
         {
-            Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>> [DEVICE] Disconnecting...");
+            Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>> [DEVICE] Disconnecting...");
             _devicePscan = new DevicePscan(_deviceSettings.Callback, _deviceSettings, _apiService);
             _devicePscan.DisconnectDevice();
         }

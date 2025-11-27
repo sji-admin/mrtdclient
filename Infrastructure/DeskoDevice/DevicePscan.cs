@@ -3,6 +3,7 @@ using cmrtd.Core.Model;
 using cmrtd.Core.Service;
 using Desko.EPass;
 using Desko.FullPage;
+using Serilog;
 using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Imaging;
@@ -73,7 +74,7 @@ namespace cmrtd.Infrastructure.DeskoDevice
             Api.OnMsr += OnEventMagStripe;
             Api.OnBarcode += OnEventBarcode;
 
-            Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [INFO] Register Event...");
+            Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [INFO] Register Event...");
         }
 
         public void UnRegisterEvent()
@@ -85,7 +86,7 @@ namespace cmrtd.Infrastructure.DeskoDevice
             Api.OnMsr -= OnEventMagStripe;
             Api.OnBarcode -= OnEventBarcode;
 
-            Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [INFO] UnRegister Event...");
+            Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [INFO] UnRegister Event...");
         }
 
         public void ConnectDevice()
@@ -93,32 +94,32 @@ namespace cmrtd.Infrastructure.DeskoDevice
             DeviceToolsPscan.HandleApiExceptions(() =>
             {
                 var sw = Stopwatch.StartNew();
-                Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [INFO] Connecting...");
+                Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [INFO] Connecting...");
                 Api.ConnectToDevice();
                 setScanSettings();
                 DeviceInfo info = Api.GetDeviceInfo();
 
-                Console.WriteLine($"FW: {info.Version:X8}.{info.Number:X8}");                
-                Console.WriteLine($"Date/Time: {info.CompileDate} / {info.CompileTime}");                
-                Console.WriteLine($"VID/PID: {info.Vid:X4} / {info.Pid:X4}");                
-                Console.WriteLine($"Features: {info.Features}");
+                Log.Information($"FW: {info.Version:X8}.{info.Number:X8}");
+                Log.Information($"Date/Time: {info.CompileDate} / {info.CompileTime}");
+                Log.Information($"VID/PID: {info.Vid:X4} / {info.Pid:X4}");
+                Log.Information($"Features: {info.Features}");
 
                 int generation = Api.GetPropertyInt(PropertyKey.DeviceIlluminationGeneration);                
                 int revision = Api.GetPropertyInt(PropertyKey.DeviceIlluminationRevision);
                 int variant = Api.GetPropertyInt(PropertyKey.DeviceIlluminationVariant);                
                 string variantVerb = Api.GetPropertyString(PropertyKey.DeviceIlluminationVariantVerbose);
-                
-                Console.WriteLine($"Illumination: {generation}.{revision}/{variant} ({variantVerb})");
+
+                Log.Information($"Illumination: {generation}.{revision}/{variant} ({variantVerb})");
 
                 int barcodeSupport = Api.GetPropertyInt(PropertyKey.DeviceSupportBarcodeOnPc);
                 
-                Console.WriteLine($"Barcode supported: {(barcodeSupport != 0 ? "Yes" : "No")}");
+                Log.Information($"Barcode supported: {(barcodeSupport != 0 ? "Yes" : "No")}");
 
                 updateDeviceInfo();
 
-                Console.WriteLine("[OK] Connected.");
+                Log.Information("[OK] Connected.");
                 sw.Stop();
-                Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [INFO] Done in {sw.ElapsedMilliseconds} ms");
+                Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [INFO] Done in {sw.ElapsedMilliseconds} ms");
             });
         }
 
@@ -126,10 +127,10 @@ namespace cmrtd.Infrastructure.DeskoDevice
         {
             DeviceToolsPscan.HandleApiExceptions(() =>
             {
-                Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [INFO] Disconnecting...");
+                Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [INFO] Disconnecting...");
                 Api.DisconnectFromDevice();
                 updateDeviceInfo();
-                Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [OK] Disconnected.");
+                Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [OK] Disconnected.");
             });
         }
 
@@ -191,13 +192,13 @@ namespace cmrtd.Infrastructure.DeskoDevice
             // Output ke console dalam bentuk tabel sederhana
             Console.WriteLine("=========================================");
             
-            Console.WriteLine(" DEVICE INFORMATION");
+            Log.Information(" DEVICE INFORMATION");
             
             Console.WriteLine("=========================================");
             
             foreach (var entry in infoList)
             {
-                Console.WriteLine($"{entry.Feature,-25} : {entry.Value}");
+                Log.Information($"{entry.Feature,-25} : {entry.Value}");
             }
             
             Console.WriteLine("=========================================");
@@ -208,24 +209,24 @@ namespace cmrtd.Infrastructure.DeskoDevice
                 WriteIndented = true
             }));
 
-            Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [INFO] Device information updated.");
+            Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [INFO] Device information updated.");
         }
         
         void UpdatePlugState(object sender, PlugEventArgs args)
         {
             if (args.State == PlugState.Plugged)
             {
-                Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [EVENT] Device plugged in");
+                Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [EVENT] Device plugged in");
 
                 if (_connectOnPlug == true)
                 {
-                    Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [ACTION] Auto-connect on plug is enabled, connecting...");
+                    Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [ACTION] Auto-connect on plug is enabled, connecting...");
                     
                     bool connected = Api.IsDeviceConnected();
                     
                     if (connected)
                     {
-                        Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [INFO] Device is already connected, skipping Reconnect.");
+                        Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [INFO] Device is already connected, skipping Reconnect.");
                     }
                     else
                     {
@@ -236,7 +237,7 @@ namespace cmrtd.Infrastructure.DeskoDevice
             }
             else
             {
-                Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [EVENT] Device unplugged");
+                Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [EVENT] Device unplugged");
             }
 
             updateDeviceInfo();
@@ -258,7 +259,7 @@ namespace cmrtd.Infrastructure.DeskoDevice
             double exposureUv = 0
             )
         {
-            Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  Menyiapkan konfigurasi scan...");
+            Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  Menyiapkan konfigurasi scan...");
 
             var settings = new ScanSettings();
 
@@ -320,12 +321,12 @@ namespace cmrtd.Infrastructure.DeskoDevice
             Api.SetExposureFactor(LightSource.Visible, Math.Pow(2, Math.Sqrt(2) * exposureVis));            
             Api.SetExposureFactor(LightSource.Ultraviolet, Math.Pow(2, Math.Sqrt(2) * exposureUv));
 
-            Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [SCAN SETTINGS] Konfigurasi selesai:");            
-            Console.WriteLine($" - Infrared: {useInfrared}, Visible: {useVisible}, UV: {useUltraviolet}");            
-            Console.WriteLine($" - AntiBG: {useAntiBg}");            
-            Console.WriteLine($" - Resolution: {resolution}");            
-            Console.WriteLine($" - ColorScheme: {colorScheme}");            
-            Console.WriteLine($" - Exposure IR:{exposureIr}, VIS:{exposureVis}, UV:{exposureUv}");
+            Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [SCAN SETTINGS] Konfigurasi selesai:");            
+            Log.Information($" - Infrared: {useInfrared}, Visible: {useVisible}, UV: {useUltraviolet}");            
+            Log.Information($" - AntiBG: {useAntiBg}");            
+            Log.Information($" - Resolution: {resolution}");            
+            Log.Information($" - ColorScheme: {colorScheme}");            
+            Log.Information($" - Exposure IR:{exposureIr}, VIS:{exposureVis}, UV:{exposureUv}");
         }
 
 
@@ -353,12 +354,12 @@ namespace cmrtd.Infrastructure.DeskoDevice
         void onScanOcr()
         {
             var uepass = new UePass();
-            Console.WriteLine("[MRZ] Mulai proses OCR...");
+            Log.Information("[MRZ] Mulai proses OCR...");
 
             string mrz = Api.GetOcrPc();
             if (mrz != null)
             {
-                Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [OCR] Membaca MRZ...");
+                Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [OCR] Membaca MRZ...");
 
                 if (!string.IsNullOrEmpty(mrz))
                 {
@@ -367,24 +368,24 @@ namespace cmrtd.Infrastructure.DeskoDevice
                     _lastScanResult.Data.MRZ = mrzLine;
                     _ocrString = mrzLine;
 
-                    Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [OCR] RESULT : {mrzLine}");
+                    Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [OCR] RESULT : {mrzLine}");
                 }
             }
             else
             {
-                Console.WriteLine("[MRZ] Gagal membaca MRZ.");                
+                Log.Information("[MRZ] Gagal membaca MRZ.");                
             }
         }
 
         void onScanBcr()
         {
             // Karena gak ada GUI, kita anggap scanning BCR selalu jalan
-            Console.WriteLine("[INFO] Mulai proses baca Barcode (BCR)...");
+            Log.Information("[INFO] Mulai proses baca Barcode (BCR)...");
 
             // Cek apakah device support barcode
             if (Api.GetPropertyInt(PropertyKey.DeviceSupportBarcodeOnPc) == 0)
             {
-                Console.WriteLine("[BCR] Tidak didukung oleh perangkat ini.");
+                Log.Information("[BCR] Tidak didukung oleh perangkat ini.");
                 return;
             }
 
@@ -401,14 +402,14 @@ namespace cmrtd.Infrastructure.DeskoDevice
                 string theText = DeviceToolsPscan.MaskNonAscii(bcr);
 
                 // Tulis ke console
-                Console.WriteLine("[BCR DATA] " + theText);
+                Log.Information("[BCR DATA] " + theText);
 
                 // Kalau mau simpan hasil ke file:
                 string filePath = Path.Combine(Directory.GetCurrentDirectory(), "barcode_log.txt");
                 File.AppendAllText(filePath, theText + Environment.NewLine);
             }
 
-            Console.WriteLine("[INFO] Proses scan BCR selesai.");
+            Log.Information("[INFO] Proses scan BCR selesai.");
         }
 
         public Task<Pasport.ScanApiResponse> ScanAsync()
@@ -417,25 +418,26 @@ namespace cmrtd.Infrastructure.DeskoDevice
             try
             {
 
-                Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [SCAN] Mulai proses scan dokumen...");
+                Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [SCAN] Mulai proses scan dokumen...");
 
                 Api.Scan();
 
-                Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [SCAN] Selesai pemindaian dokumen.");
+                Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [SCAN] Selesai pemindaian dokumen.");
 
                 buzzerStart();
+                _helper.Cleaner(_lastScanResult, _fallbackPortraitBase64);
 
                 bool isB900InkDetected = Api.CheckB900Ink();
                 if (isB900InkDetected)               
-                    Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [B900 Ink] detected.");                
+                    Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [B900 Ink] detected.");                
                 else                
-                    Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [B900 Ink] Not detected.");                                                        
+                    Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [B900 Ink] Not detected.");                                                        
 
                 bool isUvDullDetected = Api.CheckUvDullness();
                 if (isUvDullDetected)
-                    Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [UV DULL] Dull detected");
+                    Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [UV DULL] Dull detected");
                 else
-                    Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [UV DULL] Bright detected");
+                    Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [UV DULL] Bright detected");
 
 
                 _lastScanResult.Data.RgbImage.IsB900Ink = isB900InkDetected;
@@ -447,19 +449,19 @@ namespace cmrtd.Infrastructure.DeskoDevice
 
                 var dens = Api.GetCurrentPixelPerMeter();
 
-                Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [SCAN] Pixel Density: {dens.X} x {dens.Y} ppm");
+                Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [SCAN] Pixel Density: {dens.X} x {dens.Y} ppm");
 
 
                 try
                 {
-                    Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [IR] Mengambil gambar Infrared...");
+                    Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [IR] Mengambil gambar Infrared...");
 
                     var irImage = Api.GetImage(LightSource.Infrared, ImageClipping.Document);
                     irImage.Save("Infrared.png");
 
                     _lastScanResult.Data.IrImage.ImgBase64 = ConvertBitmapToBase64(irImage);
 
-                    Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [IMAGE] Infrared.png tersimpan.");
+                    Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [IMAGE] Infrared.png tersimpan.");
 
                     var faceImg = Api.GetImage(LightSource.Infrared, ImageClipping.Face);
 
@@ -475,7 +477,7 @@ namespace cmrtd.Infrastructure.DeskoDevice
                         
                         _lastScanResult.Data.IrImage.FaceLocation = filePath;
                         _lastScanResult.Data.IrImage.Location = filePath;
-                        Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [FACE] Gambar wajah tersimpan: {filePath}");
+                        Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [FACE] Gambar wajah tersimpan: {filePath}");
 
                         // Todo: Convert ke Base64
                         string base64String;
@@ -486,7 +488,7 @@ namespace cmrtd.Infrastructure.DeskoDevice
                             base64String = Convert.ToBase64String(imageBytes);
                             _lastScanResult.Data.IrImage.ImgFaceBase64 = base64String;
 
-                            Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [FACE] Base64 length: {base64String.Length}");
+                            Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [FACE] Base64 length: {base64String.Length}");
                             //Console.WriteLine(base64String); // atau kirim ke API / JSON response
                         }
 
@@ -500,7 +502,7 @@ namespace cmrtd.Infrastructure.DeskoDevice
                     }
                     else
                     {
-                        Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [ERROR] Gagal mengambil gambar wajah.");
+                        Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [ERROR] Gagal mengambil gambar wajah.");
                     }
 
                     _erpotSatu = null;
@@ -508,23 +510,23 @@ namespace cmrtd.Infrastructure.DeskoDevice
                 }
                 catch (PsaException ex)
                 {
-                    Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [IR] Gagal mengambil gambar Infrared: " + ex.Message);
+                    Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [IR] Gagal mengambil gambar Infrared: " + ex.Message);
                     _erpotSatu = "IR : " + ex.Message;
                 }
 
                 try
                 {
-                    Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [VIS] Mengambil gambar Visible...");
+                    Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [VIS] Mengambil gambar Visible...");
 
                     var visImage = Api.GetImage(LightSource.Visible, ImageClipping.Document);
                     visImage.Save("Visible.png");
 
                     _lastScanResult.Data.RgbImage.ImgBase64 = ConvertBitmapToBase64(visImage);
 
-                    Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [IMAGE] Visible.png tersimpan.");
+                    Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [IMAGE] Visible.png tersimpan.");
 
                     // TODO: Ambil gambar wajah (Face Portrait)
-                    Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [FACE] Mengambil gambar wajah...");
+                    Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [FACE] Mengambil gambar wajah...");
 
                     var faceImg = Api.GetImage(LightSource.Visible, ImageClipping.Face);
 
@@ -540,7 +542,7 @@ namespace cmrtd.Infrastructure.DeskoDevice
                         
                         _lastScanResult.Data.RgbImage.FaceLocation = filePath;
                         _lastScanResult.Data.RgbImage.Location = filePath;
-                        Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [FACE] Gambar wajah tersimpan: {filePath}");
+                        Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [FACE] Gambar wajah tersimpan: {filePath}");
 
                         // Todo: Convert ke Base64
                         string base64String;
@@ -551,7 +553,7 @@ namespace cmrtd.Infrastructure.DeskoDevice
                             base64String = Convert.ToBase64String(imageBytes);
                             _fallbackPortraitBase64 = base64String;
 
-                            Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [FACE] Base64 length: {base64String.Length}");
+                            Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [FACE] Base64 length: {base64String.Length}");
                             //Console.WriteLine(base64String); // atau kirim ke API / JSON response
                         }
 
@@ -565,7 +567,7 @@ namespace cmrtd.Infrastructure.DeskoDevice
                     }
                     else
                     {
-                        Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [ERROR] Gagal mengambil gambar wajah.");
+                        Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [ERROR] Gagal mengambil gambar wajah.");
                     }
 
                     _erpotDua = null;
@@ -573,18 +575,18 @@ namespace cmrtd.Infrastructure.DeskoDevice
                 }
                 catch (PsaException ex)
                 {
-                    Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [VIS] Gagal mengambil gambar Visible: " + ex.Message);
+                    Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [VIS] Gagal mengambil gambar Visible: " + ex.Message);
                     _erpotDua = "Visible: " + ex.Message;
                 }
 
                 try
                 {
-                    Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [UV] Mengambil gambar UV...");
+                    Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [UV] Mengambil gambar UV...");
                     var uvImage = Api.GetImage(LightSource.Ultraviolet, ImageClipping.Document);
                     uvImage.Save("Ultraviolet.png");
                     _lastScanResult.Data.UvImage.ImgBase64 = ConvertBitmapToBase64(uvImage);
 
-                    Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [IMAGE] Ultraviolet.jpeg tersimpan.");
+                    Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [IMAGE] Ultraviolet.jpeg tersimpan.");
                     var faceImg = Api.GetImage(LightSource.Ultraviolet, ImageClipping.Face);
 
                     if (faceImg != null)
@@ -599,7 +601,7 @@ namespace cmrtd.Infrastructure.DeskoDevice
 
                         _lastScanResult.Data.UvImage.FaceLocation = filePath;
                         _lastScanResult.Data.UvImage.Location = filePath;
-                        Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [FACE] Gambar wajah tersimpan: {filePath}");
+                        Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [FACE] Gambar wajah tersimpan: {filePath}");
 
                         // Todo: Convert ke Base64
                         string base64String;
@@ -610,7 +612,7 @@ namespace cmrtd.Infrastructure.DeskoDevice
                             base64String = Convert.ToBase64String(imageBytes);
                             _lastScanResult.Data.UvImage.ImgFaceBase64 = base64String;
 
-                            Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [FACE] Base64 length: {base64String.Length}");
+                            Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [FACE] Base64 length: {base64String.Length}");
                             //Console.WriteLine(base64String); // atau kirim ke API / JSON response
                         }
 
@@ -624,13 +626,13 @@ namespace cmrtd.Infrastructure.DeskoDevice
                     }
                     else
                     {
-                        Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [ERROR] Gagal mengambil gambar wajah.");
+                        Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [ERROR] Gagal mengambil gambar wajah.");
                     }
 
                 }
                 catch (PsaException ex)
                 {
-                    Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [UV] Gagal mengambil gambar UV: " + ex.Message);
+                    Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [UV] Gagal mengambil gambar UV: " + ex.Message);
                     _erpotTiga = "UV: " + ex.Message;
                 }
 
@@ -665,7 +667,7 @@ namespace cmrtd.Infrastructure.DeskoDevice
             }
             catch (PsaException ex)
             {
-                Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [ERROR] Terjadi kesalahan saat scan: " + ex.Message);
+                Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [ERROR] Terjadi kesalahan saat scan: " + ex.Message);
                 _scanCompletionSource.TrySetException(ex);
                 throw;
             }
@@ -677,12 +679,12 @@ namespace cmrtd.Infrastructure.DeskoDevice
 
         void OnDocPresented(object sender, EventArgs args)
         {
-            Console.WriteLine($"[EVENT] Document detected (DOC ON)");
+            Log.Information($"[EVENT] Document detected (DOC ON)");
             bool docPresent = Api.IsDocumentPresent();
             if (docPresent)
             {
                 if (_deviceSettings.AutoScan) {
-                    Console.WriteLine($"[ACTION] Auto-scan triggered...");
+                    Log.Information($"[ACTION] Auto-scan triggered...");
                     ScanAsync();
                 }
             }
@@ -690,8 +692,8 @@ namespace cmrtd.Infrastructure.DeskoDevice
 
         void OnDocRemoved(object sender, EventArgs args)
         {
-            Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [EVENT] Document Ejected (DOC OFF)");
-            Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [DEVICE] Ready For Next Scan");
+            Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [EVENT] Document Ejected (DOC OFF)");
+            Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [DEVICE] Ready For Next Scan");
         }
 
         void OnEventOcr(object sender, OcrEventArgs args)
@@ -700,7 +702,7 @@ namespace cmrtd.Infrastructure.DeskoDevice
             var parser = new MRZParser();
             var deviceSettingsLocal = _deviceSettings;
             string data = args.Data.Replace("\r", "").Replace("\n", "").Replace(" ", "");
-            Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [OCR] {data}");
+            Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [OCR] {data}");
 
             _lastScanResult.Data.MRZ = data;
             _ocrString = data;
@@ -714,10 +716,10 @@ namespace cmrtd.Infrastructure.DeskoDevice
 
                 try
                 {
-                    Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [UEPASS] MRZ: {data}");
+                    Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [UEPASS] MRZ: {data}");
                     uepass.ReadPassportCkiData(data, _epassport);
 
-                    Console.WriteLine($"[UEPASS] Waktu baca chip: {sw.Elapsed.TotalSeconds:F2} detik");
+                    Log.Information($"[UEPASS] Waktu baca chip: {sw.Elapsed.TotalSeconds:F2} detik");
                     sw.Restart();
 
                     string faceBase64 = null;
@@ -727,17 +729,17 @@ namespace cmrtd.Infrastructure.DeskoDevice
                     {
                         faceBase64 = _epassport.FaceBase64;
                         docType = "CHIP";
-                        Console.WriteLine($"[BASE64] Use FaceBase64 From chip ({faceBase64.Length} chars)");
+                        Log.Information($"[BASE64] Use FaceBase64 From chip ({faceBase64.Length} chars)");
                     }
                     else if (!string.IsNullOrEmpty(_fallbackPortraitBase64))
                     {
                         faceBase64 = _fallbackPortraitBase64;
                         docType = "DOKUMEN";
-                        Console.WriteLine($"[BASE64] Use fallback portrait ({faceBase64.Length} chars)");
+                        Log.Information($"[BASE64] Use fallback portrait ({faceBase64.Length} chars)");
                     }
                     else
                     {
-                        Console.WriteLine("[BASE64] Tidak ada image yang bisa dikirim");
+                        Log.Information("[BASE64] Tidak ada image yang bisa dikirim");
                         //return;
                     }
 
@@ -780,24 +782,15 @@ namespace cmrtd.Infrastructure.DeskoDevice
                         buzzerReady();
                     }
 
-                    Console.WriteLine($"[API] Semua task selesai dalam {sw.Elapsed.TotalSeconds:F2} detik");
+                    Log.Information($"[API] Semua task selesai dalam {sw.Elapsed.TotalSeconds:F2} detik");
 
-                    _helper.Cleaner
-                    (
-                        _lastScanResult.Data.MRZ,
-                        _ocrString,
-                        _lastScanResult.Data.RgbImage.ImgBase64,
-                        _lastScanResult.Data.RgbImage.ImgFaceBase64,
-                        _lastScanResult.Data.RgbImage.Location,
-                        faceBase64,
-                        _deviceSettings.Callback.Url,
-                        format,
-                        _lastScanResult.Data.RgbImage.FaceLocation                        
-                        );
+                    _fallbackPortraitBase64 = null;
+                    faceBase64 = null;
+                    Thread.Sleep(300);
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [ERROR] >>> {ex}");
+                    Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [ERROR] >>> {ex}");
                 }
             });
         }
@@ -805,13 +798,13 @@ namespace cmrtd.Infrastructure.DeskoDevice
         void OnEventMagStripe(object sender, MsrEventArgs args)
         {
             string theText = DeviceToolsPscan.MaskNonAscii(args.Data);
-            Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [MSR] {theText}");
+            Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [MSR] {theText}");
         }
 
         void OnEventBarcode(object sender, BarcodeEventArgs args)
         {
             string theText = DeviceToolsPscan.MaskNonAscii(args.Data);
-            Console.WriteLine($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [BARCODE] {theText}");
+            Log.Information($">>> {DateTime.Now:HH:mm:ss.fff} [INFO] >>>  [BARCODE] {theText}");
         }
 
         #endregion
