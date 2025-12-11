@@ -1,5 +1,6 @@
 ﻿using cmrtd.Core.Model;
 using cmrtd.Infrastructure.DeskoDevice;
+using cmrtd.Infrastructure.ThalesDevice;
 using Desko.DDA;
 using Desko.ePass;
 using Desko.EPass;
@@ -20,6 +21,7 @@ namespace cmrtd.Core.Service
         private DeviceManager _deviceManager;
         private DeviceHandler _deviceHandler;
         private DevicePscan _devicePscan;
+        private ThalesDevicesManager _thalesDevicesManager;
         private bool _disposed;
         //private readonly Epassport _epassport = new Epassport();
         private static readonly ManualResetEvent scanDoneEvent = new(false);
@@ -519,7 +521,23 @@ namespace cmrtd.Core.Service
             _devicePscan.DisconnectDevice();
         }
 
-        #endregion 
+        #endregion
 
+        #region Thales Non Blocking
+
+        public void StartThales()
+        {
+            _thalesDevicesManager = new ThalesDevicesManager(_deviceSettings.Callback, _deviceSettings, _apiService);
+            // Implementasi khusus untuk Thales Non Blocking
+            _thalesDevicesManager.InitialiseReader();
+        }
+
+        public void StopThales()
+        {
+            _thalesDevicesManager.Terminet();
+        }
+
+
+        #endregion
     }
 }

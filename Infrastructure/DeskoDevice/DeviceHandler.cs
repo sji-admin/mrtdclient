@@ -352,7 +352,7 @@ namespace cmrtd.Infrastructure.DeskoDevice
 
                         // Simpan full WHITE image
                         string patheWhite = GetUniqueFilePath(folder, $"full_{light}_{DateTime.Now:yyyyMMdd_HHmmss}", ".jpeg");
-                        bmp.Save(patheWhite, ImageFormat.Jpeg);
+                        //bmp.Save(patheWhite, ImageFormat.Jpeg);
 
                         Log.Information($" [SCAN] WHITE Full Image saved to: {patheWhite}");
                         _lastScanResult.Data.RgbImage.Location = patheWhite;
@@ -410,7 +410,7 @@ namespace cmrtd.Infrastructure.DeskoDevice
 
                         // Simpan full IR image
                         string pathIr = GetUniqueFilePath(folder, $"full_{light}_{DateTime.Now:yyyyMMdd_HHmmss}", ".jpeg");
-                        bmp.Save(pathIr, ImageFormat.Jpeg);
+                        //bmp.Save(pathIr, ImageFormat.Jpeg);
                         Log.Information($" [SCAN] IR Full Image saved to: {pathIr}");
 
                         _lastScanResult.Data.IrImage.Location = pathIr;
@@ -449,7 +449,7 @@ namespace cmrtd.Infrastructure.DeskoDevice
                             _lastScanResult.Data.IrImage.ImgFaceBase64 = base64Portrait;
 
                             string pathPortrait = GetUniqueFilePath(folder, $"portrait_{light}_{DateTime.Now:yyyyMMdd_HHmmss}", ".jpeg");
-                            portrait.Save(pathPortrait, ImageFormat.Jpeg);
+                            //portrait.Save(pathPortrait, ImageFormat.Jpeg);
 
                             if (_lastScanResult.Data.IrImage.Face == null)
                                 _lastScanResult.Data.IrImage.Face = new Pasport.FaceResult();
@@ -490,7 +490,7 @@ namespace cmrtd.Infrastructure.DeskoDevice
 
                         // Simpan full UV
                         string pathFullUv = GetUniqueFilePath(folder, $"full_{light}_{DateTime.Now:yyyyMMdd_HHmmss}", ".jpeg");
-                        bmpCopy.Save(pathFullUv, ImageFormat.Jpeg);
+                        //bmpCopy.Save(pathFullUv, ImageFormat.Jpeg);
                         _lastScanResult.Data.UvImage.Location = pathFullUv;
                         _lastScanResult.Data.UvImage.ImgBase64 = ConvertBitmapToBase64(bmpCopy, ImageFormat.Jpeg);
 
@@ -524,7 +524,7 @@ namespace cmrtd.Infrastructure.DeskoDevice
                             _lastScanResult.Data.UvImage.ImgFaceBase64 = base64Portrait;
 
                             string pathPortrait = GetUniqueFilePath(folder, $"portrait_{light}_{DateTime.Now:yyyyMMdd_HHmmss}", ".jpeg");
-                            portrait.Save(pathPortrait, ImageFormat.Jpeg);
+                            //portrait.Save(pathPortrait, ImageFormat.Jpeg);
 
                             _lastScanResult.Data.UvImage.Face ??= new Pasport.FaceResult();
                             _lastScanResult.Data.UvImage.FaceLocation = pathPortrait;

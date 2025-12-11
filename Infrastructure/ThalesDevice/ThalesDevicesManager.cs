@@ -1,4 +1,7 @@
-﻿using System.Drawing;
+﻿using cmrtd.Core.Model;
+using cmrtd.Core.Service;
+using Serilog;
+using System.Drawing;
 using System.Drawing.Imaging;
 
 namespace cmrtd.Infrastructure.ThalesDevice
@@ -7,20 +10,51 @@ namespace cmrtd.Infrastructure.ThalesDevice
     public class ThalesDevicesManager
     {
         MMM.Readers.FullPage.ReaderDocumentDetectionState prDetectState;
-        int prDetectStateCounter;
-        bool prIsAT10K550;
-        private string? imagebase54;
-        private string? imagebase64Chip;
-        private ThalesDataSend? _dataToSendConfig;
+        private int prDetectStateCounter;
+        private bool prIsAT10K550;
+        private string imagebase54;
+        private string imagebase64Chip;
+        private ThalesDataSend _dataToSendConfig;
+        public DeviceSettings _deviceSettings;
+        private readonly CallbackSettings _callbackSettings;
+        private readonly ApiService _apiService;
+        private string mrzString = "";
+        private string facebase64 = "";
+        public string format = "";
+        public string faceLocation = "";
+        public Pasport.ScanApiResponse LastScanResult => _lastScanResult;
+        private Pasport.ScanApiResponse _lastScanResult = new Pasport.ScanApiResponse
+        {
+            Code = 200,
+            Valid = true,
+            Data = new Pasport.ScanData
+            {
+                RgbImage = new Pasport.ImageResult(),
+                UvImage = new Pasport.ImageResult(),
+                IrImage = new Pasport.ImageResult()
+            }
+        };
+
+        // Constructor - inject dependencies (avoid null refs)
+        public ThalesDevicesManager(CallbackSettings callbackSettings, ApiService apiService, DeviceSettings deviceSettings)
+        {
+            _deviceSettings = deviceSettings ?? throw new ArgumentNullException(nameof(deviceSettings));
+            _apiService = apiService ?? throw new ArgumentNullException(nameof(apiService));
+            _callbackSettings = callbackSettings ?? new CallbackSettings();
+
+            // any other initialization
+        }
+
+        public ThalesDevicesManager(CallbackSettings callback, DeviceSettings deviceSettings, ApiService apiService)
+        {
+            this.callback = callback;
+            _deviceSettings = deviceSettings;
+            _apiService = apiService;
+        }
 
         public void Terminet()
         {
             MMM.Readers.FullPage.Reader.Shutdown();
-        }
-
-        void DataCallbackThreadHelper(MMM.Readers.FullPage.DataType aDataType, object aData)
-        {
-            DataCallback(aDataType, aData);
         }
 
         void DataCallback(MMM.Readers.FullPage.DataType aDataType, object aData)
@@ -32,7 +66,7 @@ namespace cmrtd.Infrastructure.ThalesDevice
 
                 if (aData == null)
                 {
-                    Console.WriteLine($"[DATA Callback] {aDataType} => null");
+                    Log.Information($"[DATA Callback] {aDataType} => null");
                     return;
                 }
 
@@ -42,17 +76,18 @@ namespace cmrtd.Infrastructure.ThalesDevice
                         {
                             MMM.Readers.CodelineData codeline = (MMM.Readers.CodelineData)aData;
 
-                            Console.WriteLine(codeline.Line1);
-                            Console.WriteLine(codeline.Line2);
-                            Console.WriteLine(codeline.Line3);
+                            Log.Information(codeline.Line1);
+                            Log.Information(codeline.Line2);
+                            Log.Information(codeline.Line3);
+                            mrzString = codeline.Line1 + codeline.Line2 + codeline.Line3;
 
                             HighlightCodelineCheckDigits(codeline);
 
-                            Console.WriteLine("Surname: " + codeline.Surname);
-                            Console.WriteLine("Forenames: " + codeline.Forenames);
-                            Console.WriteLine("Nationality: " + codeline.Nationality);
-                            Console.WriteLine("Sex: " + codeline.Sex);
-                            Console.WriteLine(
+                            Log.Information("Surname: " + codeline.Surname);
+                            Log.Information("Forenames: " + codeline.Forenames);
+                            Log.Information("Nationality: " + codeline.Nationality);
+                            Log.Information("Sex: " + codeline.Sex);
+                            Log.Information(
                                 "DateOfBirth: " +
                                 string.Format("{0:00}-{1:00}-{2:00}",
                                     codeline.DateOfBirth.Day,
@@ -61,8 +96,8 @@ namespace cmrtd.Infrastructure.ThalesDevice
                                 )
                             );
 
-                            Console.WriteLine("DocumentNumber: " + codeline.DocNumber);
-                            Console.WriteLine("DocumentType: " + codeline.DocType);
+                            Log.Information("DocumentNumber: " + codeline.DocNumber);
+                            Log.Information("DocumentType: " + codeline.DocType);
 
                             break;
                         }
@@ -70,17 +105,17 @@ namespace cmrtd.Infrastructure.ThalesDevice
                         {
                             MMM.Readers.CodelineData codeline = (MMM.Readers.CodelineData)aData;
 
-                            Console.WriteLine(codeline.Line1);
-                            Console.WriteLine(codeline.Line2);
-                            Console.WriteLine(codeline.Line3);
+                            Log.Information(codeline.Line1);
+                            Log.Information(codeline.Line2);
+                            Log.Information(codeline.Line3);
 
                             HighlightCodelineCheckDigits(codeline);
 
-                            Console.WriteLine("Surname: " + codeline.Surname);
-                            Console.WriteLine("Forenames: " + codeline.Forenames);
-                            Console.WriteLine("Nationality: " + codeline.Nationality);
-                            Console.WriteLine("Sex: " + codeline.Sex);
-                            Console.WriteLine(
+                            Log.Information("Surname: " + codeline.Surname);
+                            Log.Information("Forenames: " + codeline.Forenames);
+                            Log.Information("Nationality: " + codeline.Nationality);
+                            Log.Information("Sex: " + codeline.Sex);
+                            Log.Information(
                                 "DateOfBirth: " +
                                 string.Format("{0:00}-{1:00}-{2:00}",
                                     codeline.DateOfBirth.Day,
@@ -89,14 +124,42 @@ namespace cmrtd.Infrastructure.ThalesDevice
                                 )
                             );
 
-                            Console.WriteLine("DocumentNumber: " + codeline.DocNumber);
-                            Console.WriteLine("DocumentType: " + codeline.DocType);
+                            Log.Information("DocumentNumber: " + codeline.DocNumber);
+                            Log.Information("DocumentType: " + codeline.DocType);
 
                             break;
                         }
                     case MMM.Readers.FullPage.DataType.CD_IMAGEIR:
                     case MMM.Readers.FullPage.DataType.CD_IMAGEVIS:
+                        if (aData is Bitmap bmpvis)
+                        {
+                            Log.Information($"[{aDataType}] Image received. Size: {bmpvis.Width}x{bmpvis.Height}");
+                            format = ImageFormat.Jpeg.ToString();
+                            imagebase54 = ConvertBitmapToBase64(bmpvis, ImageFormat.Jpeg);
+                            _lastScanResult.Data.RgbImage.ImgBase64 = imagebase54;
+                            Log.Information($"base64 length : {imagebase54.Length}");
+                            SaveBitmapAsync(bmpvis, aDataType.ToString());
+                        }
+                        else
+                        {
+                            Log.Information($"[{aDataType}] (null bitmap)");
+                        }
+                        break;
                     case MMM.Readers.FullPage.DataType.CD_IMAGEPHOTO:
+                        if (aData is Bitmap bmpphoto)
+                        {
+                            Log.Information($"[{aDataType}] Image received. Size: {bmpphoto.Width}x{bmpphoto.Height}");
+                            format = ImageFormat.Jpeg.ToString();
+                            facebase64 = ConvertBitmapToBase64(bmpphoto, ImageFormat.Jpeg);
+                            //_lastScanResult.Data.RgbImage.ImgBase64 = imagebase54;
+                            Log.Information($"base64 length : {facebase64.Length}");
+                            SaveBitmapAsync(bmpphoto, aDataType.ToString());
+                        }
+                        else
+                        {
+                            Log.Information($"[{aDataType}] (null bitmap)");
+                        }
+                        break;
                     case MMM.Readers.FullPage.DataType.CD_IMAGEUV:
                     case MMM.Readers.FullPage.DataType.CD_IMAGEIRREAR:
                     case MMM.Readers.FullPage.DataType.CD_IMAGEVISREAR:
@@ -104,20 +167,21 @@ namespace cmrtd.Infrastructure.ThalesDevice
                         {
                             if (aData is Bitmap bmp)
                             {
-                                Console.WriteLine($"[{aDataType}] Image received. Size: {bmp.Width}x{bmp.Height}");
+                                Log.Information($"[{aDataType}] Image received. Size: {bmp.Width}x{bmp.Height}");
                                 imagebase54 = ConvertBitmapToBase64(bmp, ImageFormat.Jpeg);
-                                Console.WriteLine($"base64 length : {imagebase54.Length}");
+                                //facebase64 = imagebase54;
+                                Log.Information($"base64 length : {imagebase54.Length}");
                                 SaveBitmapAsync(bmp, aDataType.ToString());
                             }
                             else
                             {
-                                Console.WriteLine($"[{aDataType}] (null bitmap)");
+                                Log.Information($"[{aDataType}] (null bitmap)");
                             }
                             break;
                         }
                     case MMM.Readers.FullPage.DataType.CD_IMAGEPHOTODATA:
                         {
-                            Console.WriteLine("[IMAGEPHOTODATA] Received payload type: " + (aData?.GetType().ToString() ?? "(null)"));
+                            Log.Information("[IMAGEPHOTODATA] Received payload type: " + (aData?.GetType().ToString() ?? "(null)"));
                             // If you need to process this, enqueue background worker and parse there.
                             break;
                         }
@@ -126,15 +190,15 @@ namespace cmrtd.Infrastructure.ThalesDevice
                         {
                             MMM.Readers.CodelineData codeline = (MMM.Readers.CodelineData)aData;
 
-                            Console.WriteLine(codeline.Line1);
-                            Console.WriteLine(codeline.Line2);
-                            Console.WriteLine(codeline.Line3);
+                            Log.Information(codeline.Line1);
+                            Log.Information(codeline.Line2);
+                            Log.Information(codeline.Line3);
 
-                            Console.WriteLine("Surname: " + codeline.Surname);
-                            Console.WriteLine("Forenames: " + codeline.Forenames);
-                            Console.WriteLine("Nationality: " + codeline.Nationality);
-                            Console.WriteLine("Sex: " + codeline.Sex);
-                            Console.WriteLine(
+                            Log.Information("Surname: " + codeline.Surname);
+                            Log.Information("Forenames: " + codeline.Forenames);
+                            Log.Information("Nationality: " + codeline.Nationality);
+                            Log.Information("Sex: " + codeline.Sex);
+                            Log.Information(
                                 "DateOfBirth: " +
                                 string.Format("{0:00}-{1:00}-{2:00}",
                                     codeline.DateOfBirth.Day,
@@ -143,8 +207,8 @@ namespace cmrtd.Infrastructure.ThalesDevice
                                 )
                             );
 
-                            Console.WriteLine("DocumentNumber: " + codeline.DocNumber);
-                            Console.WriteLine("DocumentType: " + codeline.DocType);
+                            Log.Information("DocumentNumber: " + codeline.DocNumber);
+                            Log.Information("DocumentType: " + codeline.DocType);
                             break;
                         }
                     case MMM.Readers.FullPage.DataType.CD_SCDG2_PHOTO:
@@ -152,14 +216,14 @@ namespace cmrtd.Infrastructure.ThalesDevice
                         {
                             if (aData is Bitmap bmp)
                             {
-                                Console.WriteLine($"[{aDataType}] Image received. Size: {bmp.Width}x{bmp.Height}");
+                                Log.Information($"[{aDataType}] Image received. Size: {bmp.Width}x{bmp.Height}");
                                 imagebase64Chip = ConvertBitmapToBase64(bmp, ImageFormat.Jpeg);
-                                Console.WriteLine($"base64 length : {imagebase64Chip.Length}");
+                                Log.Information($"base64 length : {imagebase64Chip.Length}");
                                 SaveBitmapAsync(bmp, aDataType.ToString());
                             }
                             else
                             {
-                                Console.WriteLine($"[{aDataType}] (null bitmap)");
+                                Log.Information($"[{aDataType}] (null bitmap)");
                             }
 
                             break;
@@ -175,19 +239,18 @@ namespace cmrtd.Infrastructure.ThalesDevice
                     case MMM.Readers.FullPage.DataType.CD_CHECKSUM:
                         {
                             if (aData is int checksum)
-                                Console.WriteLine($"[CHECKSUM] Value: {checksum}");
+                                Log.Information($"[CHECKSUM] Value: {checksum}");
                             else
-                                Console.WriteLine($"[CHECKSUM] Payload type: {aData?.GetType()}; value: {aData}");
+                                Log.Information($"[CHECKSUM] Payload type: {aData?.GetType()}; value: {aData}");
                             break;
                         }
-
-                        //default:
-                        //    {
-                        //        Console.ForegroundColor = ConsoleColor.Red;
-                        //        Console.WriteLine($"[DATA] {aDataType} => Unhandled data type.");
-                        //        Console.ResetColor();
-                        //        break;
-                        //    }
+                    default:
+                        {
+                            Console.ForegroundColor = ConsoleColor.Red;
+                            Log.Information($"[DATA] {aDataType} => Unhandled data type.");
+                            Console.ResetColor();
+                            break;
+                        }
                 }
 
                 Thread.Sleep(200);
@@ -196,7 +259,7 @@ namespace cmrtd.Infrastructure.ThalesDevice
             {
                 // Log full exception including stack trace to help diagnose native/interop issues
                 LogError(MMM.Readers.ErrorCode.UNKNOWN_ERROR_OCCURRED, e.ToString());
-                Console.WriteLine(e.ToString());
+                Log.Information(e.ToString());
             }
         }
 
@@ -208,17 +271,25 @@ namespace cmrtd.Infrastructure.ThalesDevice
             {
                 try
                 {
+
                     string outDir = Path.Combine(Environment.CurrentDirectory, "output");
                     Directory.CreateDirectory(outDir);
-                    string fileName = $"{DateTime.UtcNow:yyyyMMdd_HHmmss_fff}_{tag}.png";
+                    string fileName = $"{tag}.png";
                     string path = Path.Combine(outDir, fileName);
+                    
+                    if(tag == "CD_IMAGEVIS")
+                    {
+                        _lastScanResult.Data.RgbImage.Location = path;
+                        faceLocation = path;
+                    }
+                    
                     copy.Save(path, System.Drawing.Imaging.ImageFormat.Png);
                     copy.Dispose();
-                    Console.WriteLine($"[SAVED] {path}");
+                    Log.Information($"[SAVED] {path}");
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine("[WARN] SaveBitmapAsync failed: " + ex.Message);
+                    Log.Information("[WARN] SaveBitmapAsync failed: " + ex.Message);
                 }
             });
         }
@@ -248,7 +319,7 @@ namespace cmrtd.Infrastructure.ThalesDevice
                                 if (_settings.puCameraSettings.puSplitImage == false)
                                 {
                                     // TabControl remove → Console equivalent
-                                    Console.WriteLine("[UI] Removing ImagesRearTab");
+                                    Log.Information("[UI] Removing ImagesRearTab");
                                 }
 
                                 _settings.puDataToSend.send |=
@@ -274,12 +345,12 @@ namespace cmrtd.Infrastructure.ThalesDevice
                                 if (errorCode == MMM.Readers.ErrorCode.NO_ERROR_OCCURRED &&
                                     lFeatureInfo.Length > 0)
                                 {
-                                    Console.WriteLine($"{DateTime.UtcNow.ToLongTimeString()} | LicenseInfo | {lFeatureInfo}");
+                                    Log.Information($"{DateTime.UtcNow.ToLongTimeString()} | LicenseInfo | {lFeatureInfo}");
                                 }
                             }
                             else
                             {
-                                Console.WriteLine(
+                                Log.Information(
                                     $"[ERROR] GetSettings failure: {errorCode}"
                                 );
                             }
@@ -287,7 +358,15 @@ namespace cmrtd.Infrastructure.ThalesDevice
                         }
                     case MMM.Readers.FullPage.EventCode.DOC_ON_WINDOW:
                         {
-                            Console.WriteLine("[DOC] DOC_ON_WINDOW detected");
+                            //if (_deviceSettings.AutoScan)
+                            //{
+
+                            //} else
+                            //{
+                            //    Console.WriteLine("[DOC] DOC_ON_WINDOW detected, but AutoScan is disabled.");
+                            //    MMM.Readers.FullPage.Reader.SetState(MMM.Readers.FullPage.ReaderState.READER_DISABLED, false);
+                            //}
+                            Log.Information("[DOC] DOC_ON_WINDOW detected");
                             if (MMM.Readers.FullPage.Reader.GetState() == MMM.Readers.FullPage.ReaderState.READER_DISABLED)
                             {
                                 MMM.Readers.FullPage.Reader.InsertDocument();
@@ -308,7 +387,7 @@ namespace cmrtd.Infrastructure.ThalesDevice
                                 lPluginName.Length > 0
                             )
                             {
-                                Console.WriteLine($"{DateTime.UtcNow.ToLongTimeString()} | Plugin Found | {lPluginName}");
+                                Log.Information($"{DateTime.UtcNow.ToLongTimeString()} | Plugin Found | {lPluginName}");
                                 ++lIndex;
                             }
 
@@ -329,7 +408,9 @@ namespace cmrtd.Infrastructure.ThalesDevice
                         }
                     case MMM.Readers.FullPage.EventCode.END_OF_DOCUMENT_DATA:
                         {
-                            Console.WriteLine("[DOC] END_OF_DOCUMENT_DATA data received");
+                            var _deviceSettingslocal = _deviceSettings;
+
+                            Log.Information("[DOC] END_OF_DOCUMENT_DATA data received");
                             TimeSpan duration = (DateTime.UtcNow - prDocStartTime);
                             float docTime = duration.Ticks / TimeSpan.TicksPerSecond;
 
@@ -338,8 +419,25 @@ namespace cmrtd.Infrastructure.ThalesDevice
                                 MMM.Readers.FullPage.Reader.SetState(MMM.Readers.FullPage.ReaderState.READER_DISABLED, false);
                             }
 
+                            _ = Task.Run(async () =>
+                            {
+                                if (_deviceSettingslocal.Callback.Enable)
+                                {
+                                    await _apiService.SendCallbackAsync(
+                                        mrzString,
+                                        _lastScanResult.Data.RgbImage.ImgBase64,
+                                        _lastScanResult.Data.RgbImage.Location,
+                                        facebase64,
+                                        _deviceSettings.Callback.Url,
+                                        format,
+                                        faceLocation,
+                                        _lastScanResult.Err_msg
+                                        );
+                                }
+                            });
+
                             // statusBar.Panels[1].Text replacement:
-                            Console.WriteLine($"Time: {docTime}s");
+                            Log.Information($"Time: {docTime}s");
 
                             break;
                         }
@@ -349,7 +447,7 @@ namespace cmrtd.Infrastructure.ThalesDevice
             }
             catch (Exception e)
             {
-                Console.WriteLine($"[ERROR] EventCallback failed: {e.Message}");
+                Log.Information($"[ERROR] EventCallback failed: {e.Message}");
                 LogError(0, e.Message);
             }
         }
@@ -367,7 +465,7 @@ namespace cmrtd.Infrastructure.ThalesDevice
         void WarningCallbackThreadHelper(MMM.Readers.WarningCode aWarningCode, string aWarningMessage)
         {
             string threadInfo = Thread.CurrentThread.ManagedThreadId.ToString();
-            Console.WriteLine($"[THREAD] Warning callback triggered on thread {threadInfo}");
+            Log.Information($"[THREAD] Warning callback triggered on thread {threadInfo}");
             WarningCallback(aWarningCode, aWarningMessage);
         }
 
@@ -378,7 +476,7 @@ namespace cmrtd.Infrastructure.ThalesDevice
 
         bool CertificateCallbackThreadHelper(byte[] aCertIdentifier, MMM.Readers.Modules.RF.CertType aCertType, out byte[] aCertBuffer)
         {
-            Console.WriteLine("[THREAD] Running certificate callback in current thread (console mode)");
+            Log.Information("[THREAD] Running certificate callback in current thread (console mode)");
             return CertificateCallback(aCertIdentifier, aCertType, out aCertBuffer);
         }
 
@@ -394,12 +492,12 @@ namespace cmrtd.Infrastructure.ThalesDevice
             try
             {
                 string certDir = @"C:\certs\";
-                Console.WriteLine($"[CERT] Loading external certificate for: {aCertType}");
-                Console.WriteLine($"[INFO] Searching certificates in: {certDir}");
+                Log.Information($"[CERT] Loading external certificate for: {aCertType}");
+                Log.Information($"[INFO] Searching certificates in: {certDir}");
 
                 if (!Directory.Exists(certDir))
                 {
-                    Console.WriteLine($"[ERROR] Certificate directory not found: {certDir}");
+                    Log.Information($"[ERROR] Certificate directory not found: {certDir}");
                     return false;
                 }
 
@@ -414,27 +512,27 @@ namespace cmrtd.Infrastructure.ThalesDevice
 
                 if (files.Length == 0)
                 {
-                    Console.WriteLine("[WARN] No certificate files found in directory.");
+                    Log.Information("[WARN] No certificate files found in directory.");
                     return false;
                 }
 
                 // Ambil file pertama (atau bisa diatur berdasarkan nama tertentu)
                 string selectedFile = files[0];
-                Console.WriteLine($"[INFO] Using certificate file: {Path.GetFileName(selectedFile)}");
+                Log.Information($"[INFO] Using certificate file: {Path.GetFileName(selectedFile)}");
 
                 // Baca file ke buffer
-                using (var fs = File.OpenRead(selectedFile))
-                {
-                    aCertBuffer = new byte[fs.Length];
-                    fs.Read(aCertBuffer, 0, aCertBuffer.Length);
-                }
+                //using (var fs = File.OpenRead(selectedFile))
+                //{
+                //    aCertBuffer = new byte[fs.Length];
+                //    fs.Read(aCertBuffer, 0, aCertBuffer.Length);
+                //}
 
-                Console.WriteLine($"[OK] Loaded certificate ({aCertBuffer.Length} bytes)");
+                Log.Information($"[OK] Loaded certificate ({aCertBuffer.Length} bytes)");
                 lSuccess = true;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[ERROR] Could not read certificate file: {ex.Message}");
+                Log.Information($"[ERROR] Could not read certificate file: {ex.Message}");
             }
 
             return lSuccess;
@@ -442,9 +540,9 @@ namespace cmrtd.Infrastructure.ThalesDevice
 
         void Clear()
         {
-            Console.WriteLine("----------------------------------------------------");
-            Console.WriteLine("[CLEAR] Resetting document data before new scan...");
-            Console.WriteLine("----------------------------------------------------");
+            Log.Information("----------------------------------------------------");
+            Log.Information("[CLEAR] Resetting document data before new scan...");
+            Log.Information("----------------------------------------------------");
 
             // currentMrz = null;
             // currentPhoto = null;
@@ -460,12 +558,12 @@ namespace cmrtd.Infrastructure.ThalesDevice
 
         void UpdateState(MMM.Readers.FullPage.ReaderState state)
         {
-            Console.WriteLine($">>> [STATE] Reader state changed: {state}");
+            Log.Information($">>> [STATE] Reader state changed: {state}");
 
             TimeSpan duration = DateTime.UtcNow - prDocStartTime;
             float docTime = (float)duration.TotalSeconds;
 
-            Console.WriteLine($">>> [TIME] Document process duration: {docTime:F2} seconds");
+            Log.Information($">>> [TIME] Document process duration: {docTime:F2} seconds");
         }
 
         void HighlightCodelineCheckDigits(MMM.Readers.CodelineData aCodeline)
@@ -475,13 +573,13 @@ namespace cmrtd.Infrastructure.ThalesDevice
                 string.IsNullOrEmpty(aCodeline.Line2) &&
                 string.IsNullOrEmpty(aCodeline.Line3))
             {
-                Console.WriteLine("[MRZ] No codeline data available to highlight.");
+                Log.Information("[MRZ] No codeline data available to highlight.");
                 return;
             }
 
-            Console.WriteLine("----------------------------------------------------");
-            Console.WriteLine("[MRZ] Highlighting check digits...");
-            Console.WriteLine("----------------------------------------------------");
+            Log.Information("----------------------------------------------------");
+            Log.Information("[MRZ] Highlighting check digits...");
+            Log.Information("----------------------------------------------------");
 
             for (int loop = 0; loop < aCodeline.CheckDigitDataListCount; loop++)
             {
@@ -506,7 +604,7 @@ namespace cmrtd.Infrastructure.ThalesDevice
                 bool valid = cdData.puValueExpected == cdData.puValueRead;
                 Console.ForegroundColor = valid ? ConsoleColor.Green : ConsoleColor.Red;
 
-                Console.WriteLine(
+                Log.Information(
                     $"[MRZ] Check Digit #{loop + 1} | Line: {cdData.puCodelineNumber} | Pos: {index} | " +
                     $"Expected: {cdData.puValueExpected} | Read: {cdData.puValueRead} | " +
                     $"{(valid ? "VALID" : "INVALID")}"
@@ -680,16 +778,16 @@ namespace cmrtd.Infrastructure.ThalesDevice
             {
                 if (aData is string || aData is int)
                 {
-                    Console.WriteLine(aData.ToString());
+                    Log.Information(aData.ToString());
                 }
                 else
                 {
-                    Console.WriteLine(aData.GetType().ToString());
+                    Log.Information(aData.GetType().ToString());
                 }
             }
             else
             {
-                Console.WriteLine("(null)");
+                Log.Information("(null)");
             }
 
             //TimeSpan duration = DateTime.UtcNow - prDocStartTime;
@@ -727,7 +825,7 @@ namespace cmrtd.Infrastructure.ThalesDevice
             }
 
             Console.ForegroundColor = ConsoleColor.Cyan;
-            Console.WriteLine($"[{timestamp}] [EVENT] {aEventType}{stateInfo}");
+            Log.Information($"[{timestamp}] [EVENT] {aEventType}{stateInfo}");
             Console.ResetColor();
         }
 
@@ -735,17 +833,18 @@ namespace cmrtd.Infrastructure.ThalesDevice
         {
             string timestamp = DateTime.UtcNow.ToString("HH:mm:ss.fff");
             Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine($"[{timestamp}] [ERROR] Code: {aErrorCode} | Message: {aErrorMessage}");
+            Log.Information($"[{timestamp}] [ERROR] Code: {aErrorCode} | Message: {aErrorMessage}");
             Console.ResetColor();
         }
 
         protected System.DateTime prDocStartTime = System.DateTime.UtcNow;
+        private CallbackSettings callback;
 
         void LogWarning(MMM.Readers.WarningCode aWarningCode, string aWarningMessage)
         {
             string timestamp = DateTime.UtcNow.ToString("HH:mm:ss.fff");
             Console.ForegroundColor = ConsoleColor.Yellow;
-            Console.WriteLine($"[{timestamp}] [WARNING] Code: {aWarningCode} | Message: {aWarningMessage}");
+            Log.Information($"[{timestamp}] [WARNING] Code: {aWarningCode} | Message: {aWarningMessage}");
             Console.ResetColor();
         }
 
@@ -789,7 +888,7 @@ namespace cmrtd.Infrastructure.ThalesDevice
                     }
                 }
 
-                Console.WriteLine("[INFO] Using existing MRZ data automatically.");
+                Log.Information("[INFO] Using existing MRZ data automatically.");
 
                 // Gunakan MRZ yang sudah ada dari aPasswordsInOut
                 if (!string.IsNullOrWhiteSpace(aPasswordsInOut.puFullMRZ))
@@ -799,7 +898,7 @@ namespace cmrtd.Infrastructure.ThalesDevice
                 }
                 else
                 {
-                    Console.WriteLine("[WARN] No MRZ data found. Using empty default MRZ.");
+                    Log.Information("[WARN] No MRZ data found. Using empty default MRZ.");
                     aPasswordsInOut.puFullMRZ = $"{Line1}\r{Line2}\r{Line3}".Trim();
                     result = true;
                 }
@@ -808,13 +907,13 @@ namespace cmrtd.Infrastructure.ThalesDevice
             {
                 if (!string.IsNullOrWhiteSpace(aPasswordsInOut.puCardAccessNumber))
                 {
-                    Console.WriteLine($"[INFO] Using existing CAN: {aPasswordsInOut.puCardAccessNumber}");
+                    Log.Information($"[INFO] Using existing CAN: {aPasswordsInOut.puCardAccessNumber}");
                     aPasswordsInOut.puFullMRZ = aPasswordsInOut.puCardAccessNumber;
                     result = true;
                 }
                 else
                 {
-                    Console.WriteLine("[WARN] CAN is missing — using default fallback CAN.");
+                    Log.Information("[WARN] CAN is missing — using default fallback CAN.");
                     aPasswordsInOut.puFullMRZ = "000000"; // fallback default
                     result = true;
                 }
@@ -839,20 +938,20 @@ namespace cmrtd.Infrastructure.ThalesDevice
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[ERROR] PasswordCorrectionCallback failed: {ex.Message}");
+                Log.Information($"[ERROR] PasswordCorrectionCallback failed: {ex.Message}");
                 return false;
             }
         }
 
         public void InitialiseReader()
         {
-            Console.WriteLine(">>> [INIT] Starting reader initialization...");
+            Log.Information(">>> [INIT] Starting reader initialization...");
 
             try
             {
                 // Enable logging
                 MMM.Readers.FullPage.Reader.EnableLogging(true, 1, -1, "HLNonBlockingExample.Net.log");
-                Console.WriteLine(">>> [INIT] Logging enabled.");
+                Log.Information(">>> [INIT] Logging enabled.");
 
                 UpdateState(MMM.Readers.FullPage.ReaderState.READER_NOT_INITIALISED);
                 MMM.Readers.ErrorCode lResult = MMM.Readers.ErrorCode.NO_ERROR_OCCURRED;
@@ -870,17 +969,17 @@ namespace cmrtd.Infrastructure.ThalesDevice
 
                 if (lResult != MMM.Readers.ErrorCode.NO_ERROR_OCCURRED)
                 {
-                    Console.WriteLine($"[ERROR] Initialise failed: {lResult}");
+                    Log.Information($"[ERROR] Initialise failed: {lResult}");
                     //return;
                 }
 
-                Console.WriteLine(">>> [INIT] Reader initialized successfully.");
+                Log.Information(">>> [INIT] Reader initialized successfully.");
 
                 // Set warning callback
                 MMM.Readers.FullPage.Reader.SetWarningCallback(
                     new MMM.Readers.WarningDelegate(WarningCallbackThreadHelper)
                 );
-                Console.WriteLine(">>> [INIT] Warning callback set.");
+                Log.Information(">>> [INIT] Warning callback set.");
 
                 MMM.Readers.FullPage.ReaderSettings settings;
                 MMM.Readers.ErrorCode errorCode = MMM.Readers.FullPage.Reader.GetSettings(
@@ -896,11 +995,11 @@ namespace cmrtd.Infrastructure.ThalesDevice
                     MMM.Readers.FullPage.Reader.SetRFPasswordCallback(
                         new MMM.Readers.FullPage.RFPasswordDelegate(PasswordCorrectionCallbackThreadHelper)
                     );
-                    Console.WriteLine(">>> [INIT] RF Password callback set.");
+                    Log.Information(">>> [INIT] RF Password callback set.");
                 }
                 //}
 
-                Console.WriteLine(">>> [INIT] Reader setup complete.");
+                Log.Information(">>> [INIT] Reader setup complete.");
             }
             //catch (DllNotFoundException ex)
             //{
@@ -912,11 +1011,11 @@ namespace cmrtd.Infrastructure.ThalesDevice
             //}
             catch (Exception ex)
             {
-                Console.WriteLine($"[ERROR] Unhandled exception during initialization: {ex.Message}");
+                Log.Information($"[ERROR] Unhandled exception during initialization: {ex.Message}");
             }
         }
 
-        private void SettingsDataToSend_Click(Object aSender, EventArgs aEventArgs)
+        private void SettingsDataToSendConsole(Object aSender, EventArgs aEventArgs)
         {
             MMM.Readers.FullPage.ReaderState state = MMM.Readers.FullPage.Reader.GetState();
             if (state == MMM.Readers.FullPage.ReaderState.READER_NOT_INITIALISED ||
@@ -925,7 +1024,7 @@ namespace cmrtd.Infrastructure.ThalesDevice
                 state == MMM.Readers.FullPage.ReaderState.READER_TERMINATED ||
                 state == MMM.Readers.FullPage.ReaderState.READER_READING)
             {
-                Console.WriteLine("Reader state unavailable for configuration change");
+                Log.Information("Reader state unavailable for configuration change");
                 return;
             }
             ThalesDataSend lDataToSendDlg = new ThalesDataSend();
@@ -942,7 +1041,7 @@ namespace cmrtd.Infrastructure.ThalesDevice
             }
         }
 
-        private void SettingsSave_Click(Object aSender, EventArgs aEventArgs)
+        private void SettingsSaveConsole(Object aSender, EventArgs aEventArgs)
         {
             MMM.Readers.FullPage.ReaderState state = MMM.Readers.FullPage.Reader.GetState();
             if (state == MMM.Readers.FullPage.ReaderState.READER_NOT_INITIALISED ||
@@ -951,75 +1050,10 @@ namespace cmrtd.Infrastructure.ThalesDevice
                 state == MMM.Readers.FullPage.ReaderState.READER_TERMINATED ||
                 state == MMM.Readers.FullPage.ReaderState.READER_READING)
             {
-                Console.WriteLine("Reader state unavailable for configuration change");
+                Log.Information("Reader state unavailable for configuration change");
                 return;
             }
             MMM.Readers.FullPage.Reader.SaveSettings();
-        }
-
-        private void WriteSettingsTextfile_Click(Object aSender, EventArgs aEventArgs)
-        {
-            MMM.Readers.FullPage.ReaderSettings lSettings;
-            MMM.Readers.ErrorCode lErrorCode =
-                MMM.Readers.FullPage.Reader.GetSettings(out lSettings);
-
-            string lPath = ".\\settings_data.txt";
-
-            if (lErrorCode == MMM.Readers.ErrorCode.NO_ERROR_OCCURRED)
-            {
-                lErrorCode = MMM.Readers.FullPage.Reader.WriteTextfileSettings(lSettings, ref lPath);
-                if (lErrorCode == MMM.Readers.ErrorCode.NO_ERROR_OCCURRED)
-                {
-                }
-            }
-        }
-
-        private void DisplayUHFTagID(MMM.Readers.FullPage.UHFTagIDData aData)
-        {
-            Console.WriteLine($"ManufacturerIDValue : {aData.puManufacturerID.ToString()}");
-            Console.WriteLine($"MaskDesignerIDValue : {aData.puMaskDesignerID.ToString()}");
-            Console.WriteLine($"ModelNumberValue : {aData.puModelNumber.ToString()}");
-
-            String lSerialNum = "";
-            foreach (Byte lByte in aData.puSerialNumber)
-            {
-                if (lSerialNum.Length != 0)
-                    lSerialNum += "-";
-                lSerialNum += lByte.ToString("X4");
-            }
-            Console.WriteLine($"SerialNumberValue : {lSerialNum}");
-        }
-
-        private void LoggingErrorsOnly_Click(object sender, EventArgs e)
-        {
-            SetLoggingLevel(1);
-        }
-
-        private void LoggingLowDetail_Click(object sender, EventArgs e)
-        {
-            SetLoggingLevel(2);
-        }
-
-        private void LoggingMediumDetail_Click(object sender, EventArgs e)
-        {
-            SetLoggingLevel(3);
-        }
-
-        private void LoggingHighDetail_Click(object sender, EventArgs e)
-        {
-            SetLoggingLevel(4);
-        }
-
-        private void LoggingHighestDetail_Click(object sender, EventArgs e)
-        {
-            SetLoggingLevel(5);
-        }
-
-        private void SetLoggingLevel(int aLogLevel)
-        {
-            MMM.Readers.FullPage.ReaderSettings lSettings;
-            if (MMM.Readers.FullPage.Reader.GetSettings(out lSettings) == MMM.Readers.ErrorCode.NO_ERROR_OCCURRED)
-                MMM.Readers.FullPage.Reader.EnableLogging((aLogLevel > 0 ? true : false), aLogLevel, (int)lSettings.puLoggingSettings.logMask, "HLNonBlockingExample.Net.log");
         }
 
         private string ConvertBitmapToBase64(Bitmap bitmap, ImageFormat format)
