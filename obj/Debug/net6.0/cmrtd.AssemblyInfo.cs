@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("cmrtd")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+851081762ff9fcacec565cc1bbf7836bebc515a6")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+176a42d8775d96298a99b7b7b553451c3f71a572")]
 [assembly: System.Reflection.AssemblyProductAttribute("cmrtd")]
 [assembly: System.Reflection.AssemblyTitleAttribute("cmrtd")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

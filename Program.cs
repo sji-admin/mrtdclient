@@ -9,6 +9,7 @@ using Serilog;
 using System;
 using System.Reflection;
 using System.Text;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace cmrtd
 {
@@ -31,7 +32,11 @@ namespace cmrtd
                 .CreateLogger();
 
             Log.Information("Starting cmrtd service...");
-
+            
+            // Encoding lama tidak di-load otomatis
+            // Yang aktif hanya UTF-8, UTF - 16, UTF - 32
+            Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+            
             var builder = WebApplication.CreateBuilder(args);
 
             // Override default logging
@@ -296,20 +301,64 @@ namespace cmrtd
             });
 
             // Start service aplikasi 
+            var deviceSettings = app.Configuration.GetSection("DeviceSettings").Get<DeviceSettings>();
             var deviceSvc = app.Services.GetRequiredService<DeviceService>();
-            deviceSvc.Start();
-            deviceSvc.startCki();
+
+            if (deviceSettings.Type == "PENTA")
+            {
+                deviceSvc.Start();
+            }
+            else if (deviceSettings.Type == "CKI")
+            {
+                deviceSvc.startCki();
+            }
+            else if (deviceSettings.Type == "THALES")
+            {
+                deviceSvc.StartThales();
+            }
+            else if (deviceSettings.Type == "ALL")
+            {
+                deviceSvc.Start();
+                deviceSvc.startCki();
+                deviceSvc.StartThales();
+            }
+            else
+            {
+                Log.Error($"Unknown device type in configuration: {deviceSettings.Type}");
+            }
 
             //ThalesDevicesManager _device = new ThalesDevicesManager();
             //_device.InitialiseReader();
 
             app.Lifetime.ApplicationStopping.Register(() =>
             {
-                deviceSvc.Dispose();
-                Api.Terminate();
-                DDALib.Terminate();
-                deviceSvc.StopCki();
-                //_device.Terminet();
+                if (deviceSettings.Type == "PENTA")
+                {
+                    deviceSvc.Dispose();
+                    Api.Terminate();
+                    DDALib.Terminate();
+                }
+                else if (deviceSettings.Type == "CKI")
+                {
+                    deviceSvc.StopCki();
+                }
+                else if (deviceSettings.Type == "THALES")
+                {
+                    deviceSvc.StopThales();
+                }
+                else if (deviceSettings.Type == "ALL")
+                {
+                    deviceSvc.Dispose();
+                    Api.Terminate();
+                    DDALib.Terminate();
+                    deviceSvc.StopCki();
+                    deviceSvc.StopThales();
+                }
+                else
+                {
+                    Log.Error($"Unknown device type in configuration: {deviceSettings.Type}");
+                }
+                
             });
 
             app.Run();
